@@ -1,0 +1,744 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
+import axios from 'axios';
+
+const TEAMS = [
+  { id: 'CSK', name: 'Chennai Super Kings', color: '#F5C518', logo: 'https://scores.iplt20.com/ipl/teamlogos/CSK.png', textColor: '#0E0A06' },
+  { id: 'MI', name: 'Mumbai Indians', color: '#004BA0', logo: 'https://scores.iplt20.com/ipl/teamlogos/MI.png', textColor: '#FFFFFF' },
+  { id: 'RCB', name: 'Royal Challengers Bengaluru', color: '#C8102E', logo: 'https://scores.iplt20.com/ipl/teamlogos/RCB.png', textColor: '#FFFFFF' },
+  { id: 'KKR', name: 'Kolkata Knight Riders', color: '#3A225D', logo: 'https://scores.iplt20.com/ipl/teamlogos/KKR.png', textColor: '#FFFFFF' },
+  { id: 'SRH', name: 'Sunrisers Hyderabad', color: '#F26522', logo: 'https://scores.iplt20.com/ipl/teamlogos/SRH.png', textColor: '#FFFFFF' },
+  { id: 'DC', name: 'Delhi Capitals', color: '#0078BC', logo: 'https://scores.iplt20.com/ipl/teamlogos/DC.png', textColor: '#FFFFFF' },
+  { id: 'PBKS', name: 'Punjab Kings', color: '#D71920', logo: 'https://scores.iplt20.com/ipl/teamlogos/PBKS.png', textColor: '#FFFFFF' },
+  { id: 'RR', name: 'Rajasthan Royals', color: '#E8295B', logo: 'https://scores.iplt20.com/ipl/teamlogos/RR.png', textColor: '#FFFFFF' },
+  { id: 'GT', name: 'Gujarat Titans', color: '#1C3F6E', logo: 'https://scores.iplt20.com/ipl/teamlogos/GT.png', textColor: '#FFFFFF' },
+  { id: 'LSG', name: 'Lucknow Super Giants', color: '#00A19C', logo: 'https://scores.iplt20.com/ipl/teamlogos/LSG.png', textColor: '#FFFFFF' }
+];
+
+const CreateRoom = () => {
+  const { user, token } = useAuthStore();
+  const navigate = useNavigate();
+
+  // Step state
+  const [step, setStep] = useState(1);
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Flow State
+  const [auctionType, setAuctionType] = useState(''); // 'mini' | 'mega'
+  const [selectedTeam, setSelectedTeam] = useState('');
+  
+  // Room Settings
+  const [playersPerTeam, setPlayersPerTeam] = useState(20);
+  const [startingPurse, setStartingPurse] = useState(100); // CR
+  const [maxOverseas, setMaxOverseas] = useState(4);
+  const [bidIncrement, setBidIncrement] = useState(1000000); // default 10L (1000000)
+  const [rtmEnabled, setRtmEnabled] = useState(true);
+  const [roomVisibility, setRoomVisibility] = useState('public'); // 'public' | 'private'
+  const [privateCode, setPrivateCode] = useState('');
+  const [timePerBid, setTimePerBid] = useState(30); // seconds
+  const [poolSource, setPoolSource] = useState('default'); // 'default' | '2025'
+
+  // Pre-generate room code for Step 4
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/');
+    }
+  }, [user]);
+
+  // Generate code on mount
+  useEffect(() => {
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    setGeneratedCode(code);
+  }, []);
+
+  // Update RTM setting when auction type changes
+  useEffect(() => {
+    if (auctionType === 'mini') {
+      setRtmEnabled(false);
+    } else if (auctionType === 'mega') {
+      setRtmEnabled(true);
+    }
+  }, [auctionType]);
+
+  const handleSelectAuctionType = (type) => {
+    setAuctionType(type);
+    setTimeout(() => {
+      setStep(2);
+    }, 600);
+  };
+
+  const handleSelectTeam = (teamId) => {
+    setSelectedTeam(teamId);
+  };
+
+  const handleCopyCode = () => {
+    const codeToCopy = roomVisibility === 'private' && privateCode ? privateCode : generatedCode;
+    navigator.clipboard.writeText(codeToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleLaunch = async () => {
+    setError('');
+    setIsSubmitting(true);
+
+    const codeToUse = roomVisibility === 'private' && privateCode ? privateCode.toUpperCase() : generatedCode;
+
+    try {
+      const payload = {
+        code: codeToUse,
+        type: roomVisibility,
+        auctionType,
+        franchise: selectedTeam,
+        poolSource,
+        playersPerTeam: Number(playersPerTeam),
+        startingPurse: Number(startingPurse),
+        maxOverseas: Number(maxOverseas),
+        bidIncrement: Number(bidIncrement),
+        rtmEnabled: Boolean(rtmEnabled),
+        timePerBid: Number(timePerBid)
+      };
+
+      const res = await axios.post('http://localhost:5000/api/rooms', payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      navigate(`/room/${res.data.code}`);
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.error || 'Failed to create room. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0E0A06] text-white p-6 font-['Inter'] relative flex flex-col justify-between overflow-x-hidden">
+      
+      {/* ─── HEADER WITH PROGRESS BAR & BADGES ─── */}
+      <header className="max-w-6xl mx-auto w-full mb-6">
+        <div className="flex justify-between items-center mb-6">
+          <div 
+            onClick={() => navigate('/lobby')} 
+            className="font-heading text-2xl tracking-widest cursor-pointer hover:opacity-80 transition"
+          >
+            <span className="text-[#FFB800]">IPL </span>
+            <span className="text-[#FF6B00]">AUCTION</span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {step >= 2 && (
+              <span className="bg-gradient-to-r from-[#FF6B00] to-[#FFB800] text-[#0E0A06] text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg shadow-[#FF6B00]/15 tracking-wider uppercase animate-pulse">
+                👑 Room Owner
+              </span>
+            )}
+            <button 
+              onClick={() => navigate('/lobby')}
+              className="text-xs uppercase tracking-widest border border-white/10 hover:border-[#FF6B00] px-4 py-2 rounded transition bg-[#1A1008]"
+            >
+              Exit
+            </button>
+          </div>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="relative pt-1">
+          <div className="flex mb-2 items-center justify-between text-xs font-bold uppercase tracking-widest text-white/50">
+            <span>Step {step} of 4</span>
+            <span className="text-[#FFB800]">
+              {step === 1 && 'Select Auction Mode'}
+              {step === 2 && 'Choose Franchise'}
+              {step === 3 && 'Configure Settings'}
+              {step === 4 && 'Launch Arena'}
+            </span>
+          </div>
+          <div className="overflow-hidden h-1.5 text-xs flex rounded bg-white/5">
+            <div 
+              style={{ width: `${(step / 4) * 100}%` }}
+              className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-[#FF6B00] transition-all duration-500 ease-out"
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* ─── SLIDING WRAPPER CONTAINER ─── */}
+      <main className="flex-grow max-w-6xl mx-auto w-full flex flex-col justify-center py-4 relative">
+        {error && (
+          <div className="bg-[#FF6B00]/10 border border-[#FF6B00] text-[#FF6B00] p-4 rounded-xl mb-6 text-sm text-center">
+            {error}
+          </div>
+        )}
+
+        <div className="overflow-hidden relative w-full flex-grow flex flex-col justify-center min-h-[500px]">
+          <div 
+            className="flex transition-transform duration-500 ease-out h-full"
+            style={{ transform: `translateX(-${(step - 1) * 100}%)`, width: '400%' }}
+          >
+            
+            {/* ══ STEP 1: CHOOSE AUCTION TYPE ══ */}
+            <div className="w-1/4 h-full flex-shrink-0 flex flex-col justify-center items-center px-4">
+              <h1 className="text-3xl md:text-5xl font-heading text-center mb-10 text-[#FFB800] tracking-wide animate-fade-up">
+                CHOOSE AUCTION TYPE
+              </h1>
+              <div className="grid md:grid-cols-2 gap-8 w-full max-w-4xl">
+                
+                {/* Mini Auction Card */}
+                <div 
+                  onClick={() => handleSelectAuctionType('mini')}
+                  className={`cursor-pointer rounded-2xl p-8 bg-[#1A1008] border transition-all duration-300 transform hover:-translate-y-2 flex flex-col justify-between min-h-[300px] ${
+                    auctionType === 'mini' 
+                      ? 'border-[#FF6B00] shadow-[0_0_30px_rgba(255,107,0,0.3)] scale-[1.02]' 
+                      : 'border-white/5 hover:border-[#FF6B00]/50 hover:shadow-[0_0_20px_rgba(255,107,0,0.1)]'
+                  }`}
+                >
+                  <div>
+                    <span className="text-5xl mb-6 block filter drop-shadow-[0_4px_8px_rgba(255,107,0,0.2)]">🏏</span>
+                    <h2 className="text-2xl font-heading text-white tracking-widest mb-3">MINI AUCTION</h2>
+                    <p className="text-white/60 text-sm leading-relaxed">
+                      60–80 players · Quick 20–30 min · No RTM · Fill squad gaps
+                    </p>
+                  </div>
+                  <div className="mt-8 flex items-center justify-between border-t border-white/5 pt-4">
+                    <span className="text-xs uppercase tracking-widest text-[#FF6B00] font-black">Fast Paced</span>
+                    <span className="h-2 w-2 rounded-full bg-[#FF6B00]" />
+                  </div>
+                </div>
+
+                {/* Mega Auction Card */}
+                <div 
+                  onClick={() => handleSelectAuctionType('mega')}
+                  className={`cursor-pointer rounded-2xl p-8 bg-[#1A1008] border transition-all duration-300 transform hover:-translate-y-2 flex flex-col justify-between min-h-[300px] ${
+                    auctionType === 'mega' 
+                      ? 'border-[#FFB800] shadow-[0_0_30px_rgba(255,184,0,0.3)] scale-[1.02]' 
+                      : 'border-white/5 hover:border-[#FFB800]/50 hover:shadow-[0_0_20px_rgba(255,184,0,0.1)]'
+                  }`}
+                >
+                  <div>
+                    <span className="text-5xl mb-6 block filter drop-shadow-[0_4px_8px_rgba(255,184,0,0.2)]">🔥</span>
+                    <h2 className="text-2xl font-heading text-white tracking-widest mb-3">MEGA AUCTION</h2>
+                    <p className="text-white/60 text-sm leading-relaxed">
+                      500+ players · Epic 60–90 min · RTM cards · Full squad rebuild
+                    </p>
+                  </div>
+                  <div className="mt-8 flex items-center justify-between border-t border-white/5 pt-4">
+                    <span className="text-xs uppercase tracking-widest text-[#FFB800] font-black">Strategic</span>
+                    <span className="h-2 w-2 rounded-full bg-[#FFB800]" />
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* ══ STEP 2: PICK YOUR FRANCHISE ══ */}
+            <div className="w-1/4 h-full flex-shrink-0 flex flex-col justify-start items-center px-4 overflow-y-auto">
+              <h1 className="text-3xl md:text-5xl font-heading text-center mb-1 text-[#FFB800] tracking-wide font-bold">
+                PICK YOUR FRANCHISE
+              </h1>
+              <p className="text-white/40 text-xs mb-8 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Select a franchise to lead as the room owner
+              </p>
+              
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 w-full max-w-5xl mb-8">
+                {TEAMS.map((team) => {
+                  const isSelected = selectedTeam === team.id;
+                  return (
+                    <div 
+                      key={team.id}
+                      onClick={() => handleSelectTeam(team.id)}
+                      className={`ipl-team-card ${isSelected ? 'selected' : ''}`}
+                      style={{
+                        '--team-color': team.color,
+                        '--team-color-glow': `${team.color}40`,
+                        padding: '12px 8px'
+                      }}
+                    >
+                      <img
+                        src={team.logo}
+                        alt={`${team.name} Logo`}
+                        style={{ width: '60px', height: '60px', objectFit: 'contain', marginBottom: '8px' }}
+                      />
+                      
+                      <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFFFFF', display: 'block', marginBottom: '2px' }}>
+                        {team.id}
+                      </span>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', letterSpacing: '0.5px', lineHeight: '1.2', display: 'block' }}>
+                        {team.name}
+                      </span>
+
+                      {isSelected && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '6px',
+                          right: '6px',
+                          backgroundColor: '#FFB800',
+                          color: '#0E0A06',
+                          borderRadius: '50%',
+                          width: '18px',
+                          height: '18px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 0 6px rgba(255, 184, 0, 0.6)',
+                          zIndex: 2
+                        }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0E0A06" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Step Navigation */}
+              <div className="flex gap-4 w-full max-w-xs mt-4">
+                <button 
+                  onClick={() => setStep(1)}
+                  className="flex-1 bg-[#1A1008] hover:bg-white/5 border border-white/10 hover:border-white/20 py-3 rounded-lg font-bold tracking-widest uppercase text-xs transition"
+                >
+                  Back
+                </button>
+                <button 
+                  onClick={() => selectedTeam && setStep(3)}
+                  disabled={!selectedTeam}
+                  style={{
+                    background: selectedTeam ? '#FFB800' : 'rgba(255,255,255,0.03)',
+                    color: selectedTeam ? '#0E0A06' : 'rgba(255,255,255,0.2)',
+                    boxShadow: selectedTeam ? '0 0 15px rgba(255, 184, 0, 0.45)' : 'none',
+                    border: 'none',
+                    transition: 'all 0.3s ease'
+                  }}
+                  className={`flex-1 py-3 rounded-lg font-bold tracking-widest uppercase text-xs ${
+                    selectedTeam ? 'cursor-pointer' : 'cursor-not-allowed'
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+
+            {/* ══ STEP 3: ROOM SETTINGS ══ */}
+            <div className="w-1/4 h-full flex-shrink-0 flex flex-col justify-start items-center px-4 overflow-y-auto">
+              {/* Summary badging */}
+              <div className="flex gap-3 mb-6 items-center justify-center">
+                <span className="bg-[#1A1008] border border-[#FF6B00] text-[#FF6B00] px-4 py-1.5 rounded-full font-heading tracking-widest text-xs uppercase">
+                  {auctionType === 'mini' ? '🏏 MINI AUCTION' : '🔥 MEGA AUCTION'}
+                </span>
+                <span className="bg-[#1A1008] border border-[#FFB800] text-[#FFB800] px-4 py-1.5 rounded-full font-heading tracking-widest text-xs uppercase flex items-center gap-1.5">
+                  <span 
+                    style={{ backgroundColor: TEAMS.find(t=>t.id === selectedTeam)?.color }}
+                    className="w-2.5 h-2.5 rounded-full inline-block"
+                  />
+                  {selectedTeam} Franchise
+                </span>
+              </div>
+
+              <h1 className="text-3xl md:text-5xl font-heading text-center mb-6 text-[#FFB800] tracking-wide">
+                ROOM SETTINGS
+              </h1>
+              
+              <div className="grid md:grid-cols-2 gap-6 w-full max-w-4xl mb-8 text-left">
+                
+                {/* Players Limit */}
+                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+                    Players per Team Limit
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[15, 20, 25].map((val) => (
+                      <button
+                        key={val}
+                        onClick={() => setPlayersPerTeam(val)}
+                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+                          playersPerTeam === val 
+                            ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+                        }`}
+                      >
+                        {val} Players
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Starting Purse */}
+                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3 flex justify-between">
+                    <span>Starting Purse</span>
+                    <span className="text-[#FFB800] font-black">₹{startingPurse}CR</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[80, 100, 120].map((val) => (
+                      <button
+                        key={val}
+                        onClick={() => setStartingPurse(val)}
+                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+                          startingPurse === val 
+                            ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+                        }`}
+                      >
+                        ₹{val}CR
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Max Overseas */}
+                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+                    Max Overseas Players
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[4, 6, 8].map((val) => (
+                      <button
+                        key={val}
+                        onClick={() => setMaxOverseas(val)}
+                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+                          maxOverseas === val 
+                            ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+                        }`}
+                      >
+                        {val} Max
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bid Increment */}
+                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+                    Bid Increment
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: '₹5L', value: 500000 },
+                      { label: '₹10L', value: 1000000 },
+                      { label: '₹25L', value: 2500000 }
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setBidIncrement(opt.value)}
+                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+                          bidIncrement === opt.value 
+                            ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* RTM Cards */}
+                <div className={`bg-[#1A1008] border border-white/5 rounded-xl p-5 ${auctionType === 'mini' ? 'opacity-40' : ''}`}>
+                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3 flex justify-between items-center">
+                    <span>Right To Match (RTM) Cards</span>
+                    {auctionType === 'mini' && <span className="text-[10px] text-[#FF6B00] tracking-wide normal-case font-medium">Disabled in Mini</span>}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      disabled={auctionType === 'mini'}
+                      onClick={() => setRtmEnabled(true)}
+                      className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+                        rtmEnabled 
+                          ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+                          : 'bg-[#0E0A06] border border-white/5 hover:border-white/10 disabled:cursor-not-allowed'
+                      }`}
+                    >
+                      ON
+                    </button>
+                    <button
+                      disabled={auctionType === 'mini'}
+                      onClick={() => setRtmEnabled(false)}
+                      className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+                        !rtmEnabled && auctionType !== 'mini' 
+                          ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+                          : 'bg-[#0E0A06] border border-white/5 hover:border-white/10 disabled:cursor-not-allowed'
+                      }`}
+                    >
+                      OFF
+                    </button>
+                  </div>
+                </div>
+
+                {/* Time Per Bid */}
+                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+                    Time Per Bid Window
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[15, 30, 60].map((val) => (
+                      <button
+                        key={val}
+                        onClick={() => setTimePerBid(val)}
+                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+                          timePerBid === val 
+                            ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+                        }`}
+                      >
+                        {val} Sec
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Player Pool Selection */}
+                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+                    Player Pool
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setPoolSource('default')}
+                      className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+                        poolSource === 'default' 
+                          ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+                          : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+                      }`}
+                    >
+                      Standard (47)
+                    </button>
+                    <button
+                      onClick={() => setPoolSource('2025')}
+                      className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+                        poolSource === '2025' 
+                          ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+                          : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+                      }`}
+                    >
+                      2025 Auction (141)
+                    </button>
+                  </div>
+                </div>
+
+
+                {/* Room Visibility & Code */}
+                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5 md:col-span-2">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+                        Room Visibility
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setRoomVisibility('public')}
+                          className={`py-2.5 rounded font-bold text-xs uppercase tracking-wider transition ${
+                            roomVisibility === 'public' 
+                              ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+                              : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+                          }`}
+                        >
+                          Public
+                        </button>
+                        <button
+                          onClick={() => setRoomVisibility('private')}
+                          className={`py-2.5 rounded font-bold text-xs uppercase tracking-wider transition ${
+                            roomVisibility === 'private' 
+                              ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+                              : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+                          }`}
+                        >
+                          Private
+                        </button>
+                      </div>
+                    </div>
+
+                    {roomVisibility === 'private' && (
+                      <div className="animate-fade-up">
+                        <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+                          Custom Room Code (6 chars)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          placeholder="e.g. DRAFT9"
+                          value={privateCode}
+                          onChange={(e) => setPrivateCode(e.target.value.toUpperCase())}
+                          className="w-full bg-[#0E0A06] border border-white/10 rounded px-4 py-2 text-sm focus:outline-none focus:border-[#FFB800] uppercase font-mono tracking-widest text-center"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Step Navigation */}
+              <div className="flex gap-4 w-full max-w-xs mt-4">
+                <button 
+                  onClick={() => setStep(2)}
+                  className="flex-1 bg-[#1A1008] hover:bg-white/5 border border-white/10 hover:border-white/20 py-3 rounded-lg font-bold tracking-widest uppercase text-xs transition"
+                >
+                  Back
+                </button>
+                <button 
+                  onClick={() => setStep(4)}
+                  className="flex-1 bg-[#FF6B00] hover:bg-[#FF6B00]/80 py-3 rounded-lg font-bold tracking-widest uppercase text-xs transition text-white shadow-lg shadow-[#FF6B00]/25"
+                >
+                  Review
+                </button>
+              </div>
+            </div>
+
+            {/* ══ STEP 4: REVIEW & LAUNCH ══ */}
+            <div className="w-1/4 h-full flex-shrink-0 flex flex-col justify-start items-center px-4 overflow-y-auto">
+              <h1 className="text-3xl md:text-5xl font-heading text-center mb-6 text-[#FFB800] tracking-wide animate-fade-up">
+                DRAFT BOARD PREVIEW
+              </h1>
+              
+              <div className="bg-[#1A1008] border border-white/5 rounded-2xl p-8 w-full max-w-2xl shadow-2xl relative mb-8">
+                {/* Flame effect overlay */}
+                <div className="absolute inset-0 bg-radial-gradient from-[#FF6B00]/5 via-transparent to-transparent pointer-events-none rounded-2xl" />
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-6 relative z-10 text-left">
+                  
+                  {/* Mode */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Auction Mode</span>
+                    <span className="font-heading text-xl text-[#FFB800] tracking-wide mt-1 block">
+                      {auctionType === 'mini' ? '🏏 MINI' : '🔥 MEGA'}
+                    </span>
+                  </div>
+
+                  {/* Franchise */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Your Franchise</span>
+                    <span className="font-heading text-xl text-white tracking-wide mt-1 flex items-center gap-1.5">
+                      <span 
+                        style={{ backgroundColor: TEAMS.find(t=>t.id === selectedTeam)?.color }}
+                        className="w-3 h-3 rounded-full inline-block"
+                      />
+                      {selectedTeam}
+                    </span>
+                  </div>
+
+                  {/* Purse */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Starting Purse</span>
+                    <span className="font-heading text-xl text-[#FF6B00] tracking-wide mt-1 block">
+                      ₹{startingPurse}CR
+                    </span>
+                  </div>
+
+                  {/* Squad Limit */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Squad Size</span>
+                    <span className="font-bold text-sm text-white mt-1.5 block">
+                      {playersPerTeam} Players Max
+                    </span>
+                  </div>
+
+                  {/* Overseas Limit */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Overseas Max</span>
+                    <span className="font-bold text-sm text-white mt-1.5 block">
+                      {maxOverseas} Players
+                    </span>
+                  </div>
+
+                  {/* Increment */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Bid Increment</span>
+                    <span className="font-bold text-sm text-white mt-1.5 block">
+                      ₹{bidIncrement === 500000 ? '5 Lakhs' : bidIncrement === 1000000 ? '10 Lakhs' : '25 Lakhs'}
+                    </span>
+                  </div>
+
+                  {/* RTM cards */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">RTM Cards</span>
+                    <span className="font-bold text-sm text-white mt-1.5 block">
+                      {rtmEnabled ? 'Enabled (ON)' : 'Disabled (OFF)'}
+                    </span>
+                  </div>
+
+                  {/* Visibility */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Visibility</span>
+                    <span className="font-bold text-sm text-white mt-1.5 block uppercase tracking-wider">
+                      {roomVisibility}
+                    </span>
+                  </div>
+
+                  {/* Player Pool */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Player Pool</span>
+                    <span className="font-bold text-sm text-white mt-1.5 block">
+                      {poolSource === 'default' ? 'Standard (47)' : '2025 Auction (141)'}
+                    </span>
+                  </div>
+
+                  {/* Time limit */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Bid Timer</span>
+                    <span className="font-bold text-sm text-white mt-1.5 block">
+                      {timePerBid} Seconds
+                    </span>
+                  </div>
+
+                </div>
+
+                {/* Room code display */}
+                <div className="mt-8 pt-6 border-t border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4 z-10 relative">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold mb-1">
+                      Room Access Code
+                    </span>
+                    <span className="font-mono text-2xl font-black text-[#FFB800] tracking-widest bg-[#0E0A06] border border-white/5 px-4 py-1.5 rounded-lg">
+                      {roomVisibility === 'private' && privateCode ? privateCode : generatedCode}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={handleCopyCode}
+                    className="bg-[#0E0A06] hover:bg-[#1A1008] border border-white/10 hover:border-[#FFB800] text-xs font-bold uppercase tracking-widest px-4 py-2.5 rounded-lg transition"
+                  >
+                    {copied ? '✓ Copied!' : '📋 Copy Room Code'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-4 w-full max-w-sm">
+                <button
+                  disabled={isSubmitting}
+                  onClick={handleLaunch}
+                  className="w-full bg-[#FFB800] hover:bg-[#FFB800]/90 text-[#0E0A06] font-black uppercase text-sm tracking-widest py-4 rounded-xl transition-all duration-300 transform hover:-translate-y-1 shadow-lg shadow-[#FFB800]/25 hover:shadow-[0_0_35px_rgba(255,184,0,0.4)] disabled:opacity-50 disabled:cursor-not-allowed text-center"
+                >
+                  {isSubmitting ? 'GENERATING DRAFT ARENA...' : '⚡ LAUNCH AUCTION'}
+                </button>
+
+                <button 
+                  onClick={() => setStep(3)}
+                  disabled={isSubmitting}
+                  className="w-full bg-[#1A1008] hover:bg-white/5 border border-white/10 hover:border-white/20 py-3 rounded-lg font-bold tracking-widest uppercase text-xs transition"
+                >
+                  Back to Settings
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </main>
+
+      {/* ─── FOOTER ─── */}
+      <footer className="max-w-6xl mx-auto w-full text-center text-[10px] uppercase tracking-widest text-white/20 mt-6 pt-4 border-t border-white/5">
+        IPL Auction Live Simulator • Fire & Gold Theme Enabled
+      </footer>
+
+    </div>
+  );
+};
+
+export default CreateRoom;
