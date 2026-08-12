@@ -1,0 +1,1573 @@
+﻿diff --git a/frontend/src/pages/CreateRoom.jsx b/frontend/src/pages/CreateRoom.jsx
+index 43f1b8a..55fa740 100644
+--- a/frontend/src/pages/CreateRoom.jsx
++++ b/frontend/src/pages/CreateRoom.jsx
+@@ -16,6 +16,55 @@ const TEAMS = [
+   { id: 'LSG', name: 'Lucknow Super Giants', color: '#00A19C', logo: 'https://scores.iplt20.com/ipl/teamlogos/LSG.png', textColor: '#FFFFFF' }
+ ];
+ 
++const CustomSelect = ({ value, onChange, options, label, icon }) => {
++  const [isOpen, setIsOpen] = useState(false);
++  
++  return (
++    <div className="relative">
++      <button
++        type="button"
++        onClick={() => setIsOpen(!isOpen)}
++        className="w-full flex justify-between items-center bg-[#0d0805] border border-[#3a2a1a] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#f5a623] hover:border-[#f5a623]/40 transition"
++      >
++        <span className="flex items-center gap-2">
++          {icon && <span className="text-[#8a7866]">{icon}</span>}
++          <span className="font-semibold text-white/90">
++            {options.find(opt => String(opt.value) === String(value))?.label || value}
++          </span>
++        </span>
++        <svg className={`w-3.5 h-3.5 text-[#f5a623] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
++          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
++        </svg>
++      </button>
++
++      {isOpen && (
++        <>
++          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
++          <div className="absolute left-0 right-0 mt-1 bg-[#1c1410] border border-[#3a2a1a] rounded-lg shadow-2xl z-50 py-1 max-h-60 overflow-y-auto">
++            {options.map((opt) => (
++              <button
++                key={opt.value}
++                type="button"
++                onClick={() => {
++                  onChange(opt.value);
++                  setIsOpen(false);
++                }}
++                className={`w-full text-left px-3 py-2 text-xs transition-colors ${
++                  String(value) === String(opt.value) 
++                    ? 'bg-[#f5a623]/25 text-[#f5a623] font-bold' 
++                    : 'text-white/80 hover:bg-[#f5a623]/10 hover:text-white'
++                }`}
++              >
++                {opt.label}
++              </button>
++            ))}
++          </div>
++        </>
++      )}
++    </div>
++  );
++};
++
+ const CreateRoom = () => {
+   const { user, token } = useAuthStore();
+   const navigate = useNavigate();
+@@ -25,55 +74,114 @@ const CreateRoom = () => {
+   const [error, setError] = useState('');
+   const [isSubmitting, setIsSubmitting] = useState(false);
+ 
+-  // Flow State
+-  const [auctionType, setAuctionType] = useState(''); // 'mini' | 'mega'
+-  const [selectedTeam, setSelectedTeam] = useState('');
+-  
+-  // Room Settings
+-  const [playersPerTeam, setPlayersPerTeam] = useState(20);
+-  const [startingPurse, setStartingPurse] = useState(100); // CR
+-  const [maxOverseas, setMaxOverseas] = useState(4);
+-  const [bidIncrement, setBidIncrement] = useState(1000000); // default 10L (1000000)
++  // Setup options
++  const [auctionType, setAuctionType] = useState('mini'); // 'mini' | 'mega'
++  const [auctionYear, setAuctionYear] = useState('2025');
++  const [biddingStyle, setBiddingStyle] = useState('open'); // 'open' | 'silent'
++  const [numTeams, setNumTeams] = useState(10);
++  const [teamNamingType, setTeamNamingType] = useState('real'); // 'real' | 'custom'
++  const [customTeamNames, setCustomTeamNames] = useState(Array(10).fill('').map((_, i) => `Team ${i + 1}`));
++  const [selectedTeam, setSelectedTeam] = useState('CSK');
++  const [isNeutralHost, setIsNeutralHost] = useState(false);
++  const [selectedCustomTeamIndex, setSelectedCustomTeamIndex] = useState(0);
++
++  // Room limits & rules
++  const [playersPerTeam, setPlayersPerTeam] = useState(25);
++  const [startingPurse, setStartingPurse] = useState(120); // In Crores
++  const [maxOverseas, setMaxOverseas] = useState(8);
++  const [bidIncrement, setBidIncrement] = useState(1000000); // 10L
+   const [rtmEnabled, setRtmEnabled] = useState(true);
+-  const [roomVisibility, setRoomVisibility] = useState('public'); // 'public' | 'private'
++  const [timePerBid, setTimePerBid] = useState(15); // seconds
++  const [playerCategory, setPlayerCategory] = useState('all'); // 'all' | 'batters' | 'bowlers' | 'allrounders' | 'mixed' | 'custom'
++  const [customPlayersJSON, setCustomPlayersJSON] = useState('');
++  const [basePriceRule, setBasePriceRule] = useState('real'); // 'real' | 'custom'
++  const [customBasePrice, setCustomBasePrice] = useState(20000000); // Default 2Cr flat
++
++  const [roomVisibility, setRoomVisibility] = useState('public');
+   const [privateCode, setPrivateCode] = useState('');
+-  const [timePerBid, setTimePerBid] = useState(30); // seconds
+-  const [poolSource, setPoolSource] = useState('default'); // 'default' | '2025'
+ 
+-  // Pre-generate room code for Step 4
++  // Generated code
+   const [generatedCode, setGeneratedCode] = useState('');
+   const [copied, setCopied] = useState(false);
+ 
++  // CustomSelect Options
++  const maxOverseasOptions = [
++    { value: 8, label: '8 (Real IPL Rules)' },
++    { value: 4, label: '4 (Fantasy Rules)' }
++  ];
++  
++  const basePriceRuleOptions = [
++    { value: 'real', label: 'Real Base Prices' },
++    { value: 'custom', label: 'Flat Base Price' }
++  ];
++  
++  const playerCategoryOptions = [
++    { value: 'all', label: 'All Players' },
++    { value: 'batters', label: 'Batters Only' },
++    { value: 'bowlers', label: 'Bowlers Only' },
++    { value: 'allrounders', label: 'All-Rounders' },
++    { value: 'mixed', label: 'Mixed (Shuffled 30)' },
++    { value: 'custom', label: 'Custom JSON Upload' }
++  ];
++
+   useEffect(() => {
+     if (!user) {
+       navigate('/');
+     }
+   }, [user]);
+ 
+-  // Generate code on mount
+   useEffect(() => {
+     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+     setGeneratedCode(code);
+   }, []);
+ 
+-  // Update RTM setting when auction type changes
++  // Automatically configure parameters when Year or Mode (auctionType) changes
+   useEffect(() => {
+-    if (auctionType === 'mini') {
++    if (auctionType === 'mega') {
+       setRtmEnabled(false);
+-    } else if (auctionType === 'mega') {
++      if (auctionYear === '2025') setStartingPurse(120);
++      else if (auctionYear === '2022') setStartingPurse(90);
++      else if (auctionYear === '2018') setStartingPurse(80);
++      else if (auctionYear === '2014') setStartingPurse(60);
++      else if (auctionYear === '2011') setStartingPurse(41.4);
++      else if (auctionYear === '2008') setStartingPurse(20);
++      else setStartingPurse(120); // fallback
++    } else { // mini
+       setRtmEnabled(true);
++      if (auctionYear === '2025') setStartingPurse(120);
++      else if (auctionYear === '2024') setStartingPurse(100);
++      else if (auctionYear === '2023') setStartingPurse(95);
++      else if (auctionYear === '2021') setStartingPurse(85);
++      else if (auctionYear === '2020') setStartingPurse(85);
++      else if (auctionYear === '2019') setStartingPurse(82);
++      else setStartingPurse(100); // fallback
+     }
+-  }, [auctionType]);
++  }, [auctionType, auctionYear]);
+ 
+-  const handleSelectAuctionType = (type) => {
+-    setAuctionType(type);
+-    setTimeout(() => {
+-      setStep(2);
+-    }, 600);
++  const handleCustomTeamNameChange = (index, value) => {
++    const updated = [...customTeamNames];
++    updated[index] = value;
++    setCustomTeamNames(updated);
++    if (index === 0) {
++      setSelectedTeam(value);
++    }
+   };
+ 
+-  const handleSelectTeam = (teamId) => {
+-    setSelectedTeam(teamId);
++  const getLiveSummaryText = () => {
++    const priceDesc = basePriceRule === 'real' 
++      ? 'real IPL base prices' 
++      : `a flat base price of Ôé╣${customBasePrice >= 10000000 ? `${(customBasePrice / 10000000).toFixed(2)} Cr` : `${(customBasePrice / 100000).toFixed(0)} Lakhs`}`;
++    
++    const catDesc = {
++      all: 'across all player categories',
++      batters: 'focusing on batters only',
++      bowlers: 'focusing on bowlers only',
++      allrounders: 'focusing on all-rounders only',
++      mixed: 'using a mixed pool of players',
++      custom: 'using a custom uploaded player list'
++    }[playerCategory] || 'across all player categories';
++
++    return `Each team gets Ôé╣${startingPurse} Cr to build a ${playersPerTeam}-player squad with up to ${maxOverseas} overseas players, using ${priceDesc} ${catDesc}.`;
+   };
+ 
+   const handleCopyCode = () => {
+@@ -89,19 +197,63 @@ const CreateRoom = () => {
+ 
+     const codeToUse = roomVisibility === 'private' && privateCode ? privateCode.toUpperCase() : generatedCode;
+ 
++    // Validate custom players list if custom is selected
++    let customPlayersList = [];
++    if (playerCategory === 'custom') {
++      try {
++        customPlayersList = JSON.parse(customPlayersJSON || '[]');
++        if (!Array.isArray(customPlayersList)) {
++          throw new Error('Must be a JSON Array of player objects');
++        }
++      } catch (err) {
++        setError('Invalid custom players JSON format. Must be an array of objects: [{"name":"Virat","role":"Batter","basePrice":20000000}]');
++        setIsSubmitting(false);
++        return;
++      }
++    }
++
++    const finalTeamNames = teamNamingType === 'custom'
++      ? customTeamNames.slice(0, numTeams).map((name, i) => name.trim() || `Team ${i + 1}`)
++      : TEAMS.slice(0, numTeams).map(t => t.id);
++
++    let hostClaimTeam = '';
++    if (!isNeutralHost) {
++      if (teamNamingType === 'custom') {
++        const idx = Math.min(selectedCustomTeamIndex, numTeams - 1);
++        hostClaimTeam = finalTeamNames[idx] || '';
++      } else {
++        const activeTeamIds = TEAMS.slice(0, numTeams).map(t => t.id);
++        if (activeTeamIds.includes(selectedTeam)) {
++          hostClaimTeam = selectedTeam;
++        } else {
++          hostClaimTeam = activeTeamIds[0];
++        }
++      }
++    }
++
+     try {
+       const payload = {
+         code: codeToUse,
+         type: roomVisibility,
+         auctionType,
+-        franchise: selectedTeam,
+-        poolSource,
++        franchise: hostClaimTeam,
++        poolSource: auctionYear, // selected year
+         playersPerTeam: Number(playersPerTeam),
+         startingPurse: Number(startingPurse),
+         maxOverseas: Number(maxOverseas),
+         bidIncrement: Number(bidIncrement),
+         rtmEnabled: Boolean(rtmEnabled),
+-        timePerBid: Number(timePerBid)
++        timePerBid: Number(timePerBid),
++        // Interactive Setup variables
++        auctionYear,
++        numTeams: Number(numTeams),
++        teamNames: finalTeamNames,
++        biddingStyle,
++        basePriceRule,
++        customBasePrice: Number(customBasePrice),
++        playerCategory,
++        customPlayersList,
++        maxPlayersPerTeam: Number(playersPerTeam)
+       };
+ 
+       const res = await axios.post('http://localhost:5000/api/rooms', payload, {
+@@ -111,16 +263,19 @@ const CreateRoom = () => {
+       navigate(`/room/${res.data.code}`);
+     } catch (err) {
+       console.error(err);
+-      setError(err.response?.data?.error || 'Failed to create room. Please try again.');
++      setError(
++        err.response?.data?.error || 
++        (err.request ? 'Failed to connect to backend server. Please make sure the server is running on port 5000.' : 'Failed to create room. Please check input parameters.')
++      );
+     } finally {
+       setIsSubmitting(false);
+     }
+   };
+ 
+   return (
+-    <div className="min-h-screen bg-[#0E0A06] text-white p-6 font-['Inter'] relative flex flex-col justify-between overflow-x-hidden">
++    <div className="min-h-screen bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-[#1a0f08] to-[#0d0805] text-[#f5f0e8] p-6 font-['Inter'] relative flex flex-col justify-between overflow-x-hidden pb-28">
+       
+-      {/* ÔöÇÔöÇÔöÇ HEADER WITH PROGRESS BAR & BADGES ÔöÇÔöÇÔöÇ */}
++      {/* ÔöÇÔöÇÔöÇ HEADER WITH PROGRESS BAR ÔöÇÔöÇÔöÇ */}
+       <header className="max-w-6xl mx-auto w-full mb-6">
+         <div className="flex justify-between items-center mb-6">
+           <div 
+@@ -132,11 +287,9 @@ const CreateRoom = () => {
+           </div>
+ 
+           <div className="flex items-center gap-4">
+-            {step >= 2 && (
+-              <span className="bg-gradient-to-r from-[#FF6B00] to-[#FFB800] text-[#0E0A06] text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg shadow-[#FF6B00]/15 tracking-wider uppercase animate-pulse">
+-                ­ƒææ Room Owner
+-              </span>
+-            )}
++            <span className="bg-gradient-to-r from-[#FF6B00] to-[#FFB800] text-[#0E0A06] text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg shadow-[#FF6B00]/15 tracking-wider uppercase animate-pulse">
++              ­ƒææ Room Owner Setup
++            </span>
+             <button 
+               onClick={() => navigate('/lobby')}
+               className="text-xs uppercase tracking-widest border border-white/10 hover:border-[#FF6B00] px-4 py-2 rounded transition bg-[#1A1008]"
+@@ -152,8 +305,8 @@ const CreateRoom = () => {
+             <span>Step {step} of 4</span>
+             <span className="text-[#FFB800]">
+               {step === 1 && 'Select Auction Mode'}
+-              {step === 2 && 'Choose Franchise'}
+-              {step === 3 && 'Configure Settings'}
++              {step === 2 && 'Select Year'}
++              {step === 3 && 'Configure Room Settings'}
+               {step === 4 && 'Launch Arena'}
+             </span>
+           </div>
+@@ -174,515 +327,776 @@ const CreateRoom = () => {
+           </div>
+         )}
+ 
+-        <div className="overflow-hidden relative w-full flex-grow flex flex-col justify-center min-h-[500px]">
++        <div className="overflow-hidden relative w-full flex-grow flex flex-col justify-center min-h-[550px]">
+           <div 
+             className="flex transition-transform duration-500 ease-out h-full"
+-            style={{ transform: `translateX(-${(step - 1) * 100}%)`, width: '400%' }}
++            style={{ transform: `translateX(-${(step - 1) * 25}%)`, width: '400%' }}
+           >
+             
+-            {/* ÔòÉÔòÉ STEP 1: CHOOSE AUCTION TYPE ÔòÉÔòÉ */}
+-            <div className="w-1/4 h-full flex-shrink-0 flex flex-col justify-center items-center px-4">
+-              <h1 className="text-3xl md:text-5xl font-heading text-center mb-10 text-[#FFB800] tracking-wide animate-fade-up">
+-                CHOOSE AUCTION TYPE
++            {/* ÔòÉÔòÉ STEP 1: SELECT AUCTION MODE ÔòÉÔòÉ */}
++            <div className="w-1/4 h-full flex-shrink-0 flex flex-col justify-start items-center px-4 overflow-y-auto">
++              <h1 className="text-3xl md:text-5xl font-heading text-center mb-6 text-[#FFB800] tracking-wide">
++                SELECT AUCTION MODE
+               </h1>
+-              <div className="grid md:grid-cols-2 gap-8 w-full max-w-4xl">
++              
++              <div className="grid md:grid-cols-2 gap-6 w-full max-w-4xl mb-6">
+                 
+-                {/* Mini Auction Card */}
++                {/* Mega Option */}
+                 <div 
+-                  onClick={() => handleSelectAuctionType('mini')}
+-                  className={`cursor-pointer rounded-2xl p-8 bg-[#1A1008] border transition-all duration-300 transform hover:-translate-y-2 flex flex-col justify-between min-h-[300px] ${
+-                    auctionType === 'mini' 
+-                      ? 'border-[#FF6B00] shadow-[0_0_30px_rgba(255,107,0,0.3)] scale-[1.02]' 
+-                      : 'border-white/5 hover:border-[#FF6B00]/50 hover:shadow-[0_0_20px_rgba(255,107,0,0.1)]'
++                  onClick={() => {
++                    setAuctionType('mega');
++                    setAuctionYear('2025'); // Reset to default Mega year
++                  }}
++                  className={`cursor-pointer rounded-xl p-6 bg-[#1A1008] border transition text-left relative overflow-hidden ${
++                    auctionType === 'mega' ? 'border-[#FFB800] bg-[#FFB800]/5 shadow-lg shadow-[#FFB800]/10' : 'border-white/5 hover:border-white/10'
+                   }`}
+                 >
+-                  <div>
+-                    <span className="text-5xl mb-6 block filter drop-shadow-[0_4px_8px_rgba(255,107,0,0.2)]">­ƒÅÅ</span>
+-                    <h2 className="text-2xl font-heading text-white tracking-widest mb-3">MINI AUCTION</h2>
+-                    <p className="text-white/60 text-sm leading-relaxed">
+-                      60ÔÇô80 players ┬À Quick 20ÔÇô30 min ┬À No RTM ┬À Fill squad gaps
+-                    </p>
+-                  </div>
+-                  <div className="mt-8 flex items-center justify-between border-t border-white/5 pt-4">
+-                    <span className="text-xs uppercase tracking-widest text-[#FF6B00] font-black">Fast Paced</span>
+-                    <span className="h-2 w-2 rounded-full bg-[#FF6B00]" />
++                  <div className="absolute top-3 right-3 text-xs font-black uppercase text-[#FFB800] bg-[#FFB800]/15 px-2 py-0.5 rounded">
++                    Mode 1
+                   </div>
++                  <h3 className="font-heading text-2xl text-white mb-2">­ƒƒó BUILD FROM SCRATCH</h3>
++                  <p className="text-xs text-white/70 mb-4 leading-relaxed">
++                    Every participant starts with zero players. No pre-assignments. Build your fantasy IPL team entirely through live auction bidding.
++                  </p>
++                  <ul className="text-[10px] text-white/50 space-y-1">
++                    <li>ÔÇó Squad slots: 11 Min to 25 Max</li>
++                    <li>ÔÇó Limit: 4 or 8 Overseas players cap</li>
++                    <li>ÔÇó Compulsory: 1 WK, 3 BAT, 3 BOWL, 1 ALL-ROUNDER</li>
++                  </ul>
+                 </div>
+ 
+-                {/* Mega Auction Card */}
++                {/* Mini Option */}
+                 <div 
+-                  onClick={() => handleSelectAuctionType('mega')}
+-                  className={`cursor-pointer rounded-2xl p-8 bg-[#1A1008] border transition-all duration-300 transform hover:-translate-y-2 flex flex-col justify-between min-h-[300px] ${
+-                    auctionType === 'mega' 
+-                      ? 'border-[#FFB800] shadow-[0_0_30px_rgba(255,184,0,0.3)] scale-[1.02]' 
+-                      : 'border-white/5 hover:border-[#FFB800]/50 hover:shadow-[0_0_20px_rgba(255,184,0,0.1)]'
++                  onClick={() => {
++                    setAuctionType('mini');
++                    setAuctionYear('2025'); // Reset to default Mini year
++                  }}
++                  className={`cursor-pointer rounded-xl p-6 bg-[#1A1008] border transition text-left relative overflow-hidden ${
++                    auctionType === 'mini' ? 'border-[#FF6B00] bg-[#FF6B00]/5 shadow-lg shadow-[#FF6B00]/10' : 'border-white/5 hover:border-white/10'
+                   }`}
+                 >
+-                  <div>
+-                    <span className="text-5xl mb-6 block filter drop-shadow-[0_4px_8px_rgba(255,184,0,0.2)]">­ƒöÑ</span>
+-                    <h2 className="text-2xl font-heading text-white tracking-widest mb-3">MEGA AUCTION</h2>
+-                    <p className="text-white/60 text-sm leading-relaxed">
+-                      500+ players ┬À Epic 60ÔÇô90 min ┬À RTM cards ┬À Full squad rebuild
+-                    </p>
+-                  </div>
+-                  <div className="mt-8 flex items-center justify-between border-t border-white/5 pt-4">
+-                    <span className="text-xs uppercase tracking-widest text-[#FFB800] font-black">Strategic</span>
+-                    <span className="h-2 w-2 rounded-full bg-[#FFB800]" />
++                  <div className="absolute top-3 right-3 text-xs font-black uppercase text-[#FF6B00] bg-[#FF6B00]/15 px-2 py-0.5 rounded">
++                    Mode 2
+                   </div>
++                  <h3 className="font-heading text-2xl text-white mb-2">­ƒöÁ RETENTION + AUCTION</h3>
++                  <p className="text-xs text-white/70 mb-4 leading-relaxed">
++                    Mini Auction style. Claim an IPL franchise, retain core players from their real squad (deducted from purse), then draft to fill roster slots.
++                  </p>
++                  <ul className="text-[10px] text-white/50 space-y-1">
++                    <li>ÔÇó Cost deductions apply based on retention policies</li>
++                    <li>ÔÇó Remaining purse carries over to draft</li>
++                    <li>ÔÇó RTM (Right to Match) cards toggle option</li>
++                  </ul>
+                 </div>
+ 
+               </div>
++
+             </div>
+ 
+-            {/* ÔòÉÔòÉ STEP 2: PICK YOUR FRANCHISE ÔòÉÔòÉ */}
++            {/* ÔòÉÔòÉ STEP 2: SELECT AUCTION YEAR ÔòÉÔòÉ */}
+             <div className="w-1/4 h-full flex-shrink-0 flex flex-col justify-start items-center px-4 overflow-y-auto">
+-              <h1 className="text-3xl md:text-5xl font-heading text-center mb-1 text-[#FFB800] tracking-wide font-bold">
+-                PICK YOUR FRANCHISE
++              <h1 className="text-3xl md:text-5xl font-heading text-center mb-2 text-[#FFB800] tracking-wide">
++                SELECT AUCTION YEAR
+               </h1>
+-              <p className="text-white/40 text-xs mb-8 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>
+-                Select a franchise to lead as the room owner
++              <p className="text-white/40 text-xs mb-6 text-center">
++                Loading player pool, retention rules, purse limits, and squad rules based on the selected year.
+               </p>
+-              
+-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 w-full max-w-5xl mb-8">
+-                {TEAMS.map((team) => {
+-                  const isSelected = selectedTeam === team.id;
+-                  return (
+-                    <div 
+-                      key={team.id}
+-                      onClick={() => handleSelectTeam(team.id)}
+-                      className={`ipl-team-card ${isSelected ? 'selected' : ''}`}
+-                      style={{
+-                        '--team-color': team.color,
+-                        '--team-color-glow': `${team.color}40`,
+-                        padding: '12px 8px'
+-                      }}
+-                    >
+-                      <img
+-                        src={team.logo}
+-                        alt={`${team.name} Logo`}
+-                        style={{ width: '60px', height: '60px', objectFit: 'contain', marginBottom: '8px' }}
+-                      />
+-                      
+-                      <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFFFFF', display: 'block', marginBottom: '2px' }}>
+-                        {team.id}
+-                      </span>
+-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', letterSpacing: '0.5px', lineHeight: '1.2', display: 'block' }}>
+-                        {team.name}
+-                      </span>
+ 
+-                      {isSelected && (
+-                        <div style={{
+-                          position: 'absolute',
+-                          top: '6px',
+-                          right: '6px',
+-                          backgroundColor: '#FFB800',
+-                          color: '#0E0A06',
+-                          borderRadius: '50%',
+-                          width: '18px',
+-                          height: '18px',
+-                          display: 'flex',
+-                          alignItems: 'center',
+-                          justifyContent: 'center',
+-                          boxShadow: '0 0 6px rgba(255, 184, 0, 0.6)',
+-                          zIndex: 2
+-                        }}>
+-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0E0A06" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+-                            <polyline points="20 6 9 17 4 12"></polyline>
+-                          </svg>
+-                        </div>
+-                      )}
++              <div className="bg-[#1A1008] border border-white/5 rounded-2xl p-6 w-full max-w-2xl text-left mb-6">
++                <label className="text-xs uppercase tracking-widest text-[#FFB800] font-black block mb-3">
++                  Year
++                </label>
++                <select 
++                  value={auctionYear}
++                  onChange={(e) => setAuctionYear(e.target.value)}
++                  className="w-full bg-[#0E0A06] border border-white/10 rounded px-4 py-3 text-sm focus:outline-none focus:border-[#FFB800]"
++                >
++                  {auctionType === 'mega' ? (
++                    <>
++                      <option value="2025">2025</option>
++                      <option value="2022">2022</option>
++                      <option value="2018">2018</option>
++                      <option value="2014">2014</option>
++                      <option value="2011">2011</option>
++                      <option value="2008">2008</option>
++                    </>
++                  ) : (
++                    <>
++                      <option value="2025">2025</option>
++                      <option value="2024">2024</option>
++                      <option value="2023">2023</option>
++                      <option value="2021">2021</option>
++                      <option value="2020">2020</option>
++                      <option value="2019">2019</option>
++                    </>
++                  )}
++                </select>
++
++                <div className="mt-6 border-t border-white/5 pt-4 space-y-3">
++                  <h4 className="text-xs uppercase tracking-widest text-white/50 font-bold">Auto-Loaded Rules:</h4>
++                  <div className="grid grid-cols-2 gap-4 text-xs">
++                    <div>
++                      <span className="text-white/40 block">Purse Limit</span>
++                      <span className="text-white font-bold text-sm">Ôé╣{startingPurse} Cr</span>
++                    </div>
++                    <div>
++                      <span className="text-white/40 block">Roster Limits</span>
++                      <span className="text-white font-bold text-sm">{playersPerTeam} Max</span>
++                    </div>
++                    <div>
++                      <span className="text-white/40 block">Overseas Cap</span>
++                      <span className="text-white font-bold text-sm">Max {maxOverseas} Players</span>
++                    </div>
++                    <div>
++                      <span className="text-white/40 block">RTM Cards</span>
++                      <span className="text-white font-bold text-sm">
++                        {auctionType === 'mega' ? 'Not Available' : 'Available (Real Rules)'}
++                      </span>
+                     </div>
+-                  );
+-                })}
++                  </div>
++                </div>
+               </div>
+ 
+-              {/* Step Navigation */}
+-              <div className="flex gap-4 w-full max-w-xs mt-4">
+-                <button 
+-                  onClick={() => setStep(1)}
+-                  className="flex-1 bg-[#1A1008] hover:bg-white/5 border border-white/10 hover:border-white/20 py-3 rounded-lg font-bold tracking-widest uppercase text-xs transition"
+-                >
+-                  Back
+-                </button>
+-                <button 
+-                  onClick={() => selectedTeam && setStep(3)}
+-                  disabled={!selectedTeam}
+-                  style={{
+-                    background: selectedTeam ? '#FFB800' : 'rgba(255,255,255,0.03)',
+-                    color: selectedTeam ? '#0E0A06' : 'rgba(255,255,255,0.2)',
+-                    boxShadow: selectedTeam ? '0 0 15px rgba(255, 184, 0, 0.45)' : 'none',
+-                    border: 'none',
+-                    transition: 'all 0.3s ease'
+-                  }}
+-                  className={`flex-1 py-3 rounded-lg font-bold tracking-widest uppercase text-xs ${
+-                    selectedTeam ? 'cursor-pointer' : 'cursor-not-allowed'
+-                  }`}
+-                >
+-                  Next
+-                </button>
+-              </div>
+             </div>
+ 
+-            {/* ÔòÉÔòÉ STEP 3: ROOM SETTINGS ÔòÉÔòÉ */}
++            {/* ÔòÉÔòÉ STEP 3: CONFIGURE ROOM SETTINGS ÔòÉÔòÉ */}
+             <div className="w-1/4 h-full flex-shrink-0 flex flex-col justify-start items-center px-4 overflow-y-auto">
+-              {/* Summary badging */}
+-              <div className="flex gap-3 mb-6 items-center justify-center">
+-                <span className="bg-[#1A1008] border border-[#FF6B00] text-[#FF6B00] px-4 py-1.5 rounded-full font-heading tracking-widest text-xs uppercase">
+-                  {auctionType === 'mini' ? '­ƒÅÅ MINI AUCTION' : '­ƒöÑ MEGA AUCTION'}
+-                </span>
+-                <span className="bg-[#1A1008] border border-[#FFB800] text-[#FFB800] px-4 py-1.5 rounded-full font-heading tracking-widest text-xs uppercase flex items-center gap-1.5">
+-                  <span 
+-                    style={{ backgroundColor: TEAMS.find(t=>t.id === selectedTeam)?.color }}
+-                    className="w-2.5 h-2.5 rounded-full inline-block"
+-                  />
+-                  {selectedTeam} Franchise
++              <div className="text-center mb-1.5 mt-2">
++                <span className="text-[10px] uppercase tracking-widest text-[#f5a623] font-bold border border-[#f5a623]/20 bg-[#f5a623]/5 px-3 py-1 rounded-full">
++                  STEP 3 OF 4
+                 </span>
+               </div>
+-
+-              <h1 className="text-3xl md:text-5xl font-heading text-center mb-6 text-[#FFB800] tracking-wide">
+-                ROOM SETTINGS
++              <h1 className="text-3xl md:text-5xl font-heading text-center mb-1 text-[#FFB800] tracking-widest gold-text-glow">
++                ROOM SETTINGS & ASSIGNMENTS
+               </h1>
++              <p className="text-[#8a7866] text-xs mb-4 text-center">Configure details for franchises, bidding format, and custom overrides</p>
++              
++              {/* Divider */}
++              <div className="w-full max-w-xl mx-auto gold-gradient-divider mb-8" />
+               
+-              <div className="grid md:grid-cols-2 gap-6 w-full max-w-4xl mb-8 text-left">
++              <div className="w-full max-w-5xl grid md:grid-cols-3 gap-8 items-start text-left mb-6">
+                 
+-                {/* Players Limit */}
+-                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+-                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+-                    Players per Team Limit
+-                  </label>
+-                  <div className="grid grid-cols-3 gap-2">
+-                    {[15, 20, 25].map((val) => (
++                {/* Column 1: Franchise Claim & Naming */}
++                <div className="bg-[#1c1410] border border-[#3a2a1a] rounded-2xl p-6 shadow-xl space-y-6">
++                  <div className="relative pb-2 border-b border-white/5">
++                    <div className="absolute left-0 bottom-0 h-0.5 bg-gradient-to-r from-[#f5a623] to-[#ff6b35] w-12" />
++                    <h3 className="text-sm uppercase tracking-widest text-[#f5f0e8] font-extrabold flex items-center gap-2">
++                      <span className="text-[#f5a623]">­ƒÅƒ´©Å</span> FRANCHISE SETUP
++                    </h3>
++                  </div>
++                  
++                  {/* Number of Teams */}
++                  <div className="space-y-2">
++                    <div className="flex justify-between items-center mb-1">
++                      <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block">Number of Teams</label>
++                      <span className="text-sm font-heading text-[#f5a623] tracking-wider pulse-gold font-bold">{numTeams} TEAMS</span>
++                    </div>
++                    <div className="relative">
++                      <input
++                        type="range"
++                        min={2}
++                        max={10}
++                        value={numTeams}
++                        onChange={(e) => setNumTeams(Number(e.target.value))}
++                        style={{
++                          background: `linear-gradient(to right, #f5a623 0%, #ff6b35 ${((numTeams - 2) / 8) * 100}%, #0d0805 ${((numTeams - 2) / 8) * 100}%, #0d0805 100%)`
++                        }}
++                        className="w-full h-1.5 rounded-lg appearance-none cursor-pointer custom-range-slider"
++                      />
++                      {/* Tick marks */}
++                      <div className="flex justify-between px-1 mt-1.5">
++                        {[2, 4, 6, 8, 10].map(val => (
++                          <div key={val} className="flex flex-col items-center">
++                            <div className={`h-1.5 w-0.5 rounded-full ${numTeams >= val ? 'bg-[#f5a623]' : 'bg-white/15'}`} />
++                            <span className={`text-[8px] font-bold mt-1 ${numTeams === val ? 'text-[#f5a623]' : 'text-white/30'}`}>
++                              {val}
++                            </span>
++                          </div>
++                        ))}
++                      </div>
++                    </div>
++                  </div>
++
++                  {/* Team Naming */}
++                  <div className="space-y-2">
++                    <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block mb-2">Naming Rule</label>
++                    <div className="relative flex p-1 bg-[#0d0805] border border-[#3a2a1a] rounded-full w-full select-none">
++                      {/* Sliding Background */}
++                      <div 
++                        className="absolute top-1 bottom-1 rounded-full bg-gradient-to-r from-[#f5a623] to-[#ff6b35] transition-all duration-300 ease-out shadow-[0_0_10px_rgba(245,166,35,0.4)]"
++                        style={{
++                          left: teamNamingType === 'custom' ? '50%' : '4px',
++                          width: 'calc(50% - 6px)'
++                        }}
++                      />
+                       <button
+-                        key={val}
+-                        onClick={() => setPlayersPerTeam(val)}
+-                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                          playersPerTeam === val 
+-                            ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+-                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
++                        type="button"
++                        onClick={() => setTeamNamingType('real')}
++                        className={`relative z-10 w-1/2 text-center py-1.5 rounded-full font-bold text-[10px] uppercase tracking-wider transition duration-300 flex items-center justify-center gap-1.5 ${
++                          teamNamingType === 'real' ? 'text-[#0d0805]' : 'text-[#8a7866] hover:text-white'
+                         }`}
+                       >
+-                        {val} Players
++                        <span>­ƒÅÀ´©Å</span> Real Names
+                       </button>
+-                    ))}
+-                  </div>
+-                </div>
+-
+-                {/* Starting Purse */}
+-                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+-                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3 flex justify-between">
+-                    <span>Starting Purse</span>
+-                    <span className="text-[#FFB800] font-black">Ôé╣{startingPurse}CR</span>
+-                  </label>
+-                  <div className="grid grid-cols-3 gap-2">
+-                    {[80, 100, 120].map((val) => (
+                       <button
+-                        key={val}
+-                        onClick={() => setStartingPurse(val)}
+-                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                          startingPurse === val 
+-                            ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+-                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
++                        type="button"
++                        onClick={() => setTeamNamingType('custom')}
++                        className={`relative z-10 w-1/2 text-center py-1.5 rounded-full font-bold text-[10px] uppercase tracking-wider transition duration-300 flex items-center justify-center gap-1.5 ${
++                          teamNamingType === 'custom' ? 'text-[#0d0805]' : 'text-[#8a7866] hover:text-white'
+                         }`}
+                       >
+-                        Ôé╣{val}CR
++                        <span>Ô£Å´©Å</span> Custom Names
+                       </button>
+-                    ))}
++                    </div>
++
++                    {teamNamingType === 'custom' && (
++                      <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-[#0d0805] border border-[#3a2a1a] rounded-xl mb-3">
++                        {Array.from({ length: numTeams }).map((_, i) => (
++                          <div key={i} className="flex items-center gap-1.5">
++                            <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest font-mono">#{i + 1}</span>
++                            <input
++                              type="text"
++                              value={customTeamNames[i] || ''}
++                              onChange={(e) => handleCustomTeamNameChange(i, e.target.value)}
++                              placeholder={`Team ${i + 1}`}
++                              className="bg-[#170e0a] border border-[#3a2a1a] rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#f5a623] w-full text-white"
++                            />
++                          </div>
++                        ))}
++                      </div>
++                    )}
+                   </div>
+-                </div>
+ 
+-                {/* Max Overseas */}
+-                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+-                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+-                    Max Overseas Players
+-                  </label>
+-                  <div className="grid grid-cols-3 gap-2">
+-                    {[4, 6, 8].map((val) => (
++                  {/* Host Franchise Role */}
++                  <div className="space-y-2">
++                    <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block mb-2">Host Franchise Role</label>
++                    <div className="relative flex p-1 bg-[#0d0805] border border-[#3a2a1a] rounded-full w-full select-none">
++                      {/* Sliding Background */}
++                      <div 
++                        className="absolute top-1 bottom-1 rounded-full bg-gradient-to-r from-[#f5a623] to-[#ff6b35] transition-all duration-300 ease-out shadow-[0_0_10px_rgba(245,166,35,0.4)]"
++                        style={{
++                          left: isNeutralHost ? '50%' : '4px',
++                          width: 'calc(50% - 6px)'
++                        }}
++                      />
+                       <button
+-                        key={val}
+-                        onClick={() => setMaxOverseas(val)}
+-                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                          maxOverseas === val 
+-                            ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+-                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
++                        type="button"
++                        onClick={() => setIsNeutralHost(false)}
++                        className={`relative z-10 w-1/2 text-center py-1.5 rounded-full font-bold text-[10px] uppercase tracking-wider transition duration-300 flex items-center justify-center gap-1.5 ${
++                          !isNeutralHost ? 'text-[#0d0805]' : 'text-[#8a7866] hover:text-white'
+                         }`}
+                       >
+-                        {val} Max
++                        <span>­ƒææ</span> Claim Franchise
+                       </button>
+-                    ))}
+-                  </div>
+-                </div>
+-
+-                {/* Bid Increment */}
+-                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+-                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+-                    Bid Increment
+-                  </label>
+-                  <div className="grid grid-cols-3 gap-2">
+-                    {[
+-                      { label: 'Ôé╣5L', value: 500000 },
+-                      { label: 'Ôé╣10L', value: 1000000 },
+-                      { label: 'Ôé╣25L', value: 2500000 }
+-                    ].map((opt) => (
+                       <button
+-                        key={opt.value}
+-                        onClick={() => setBidIncrement(opt.value)}
+-                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                          bidIncrement === opt.value 
+-                            ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+-                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
++                        type="button"
++                        onClick={() => setIsNeutralHost(true)}
++                        className={`relative z-10 w-1/2 text-center py-1.5 rounded-full font-bold text-[10px] uppercase tracking-wider transition duration-300 flex items-center justify-center gap-1.5 ${
++                          isNeutralHost ? 'text-[#0d0805]' : 'text-[#8a7866] hover:text-white'
+                         }`}
+                       >
+-                        {opt.label}
++                        <span>­ƒÄÖ´©Å</span> Neutral Host
+                       </button>
+-                    ))}
+-                  </div>
+-                </div>
++                    </div>
+ 
+-                {/* RTM Cards */}
+-                <div className={`bg-[#1A1008] border border-white/5 rounded-xl p-5 ${auctionType === 'mini' ? 'opacity-40' : ''}`}>
+-                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3 flex justify-between items-center">
+-                    <span>Right To Match (RTM) Cards</span>
+-                    {auctionType === 'mini' && <span className="text-[10px] text-[#FF6B00] tracking-wide normal-case font-medium">Disabled in Mini</span>}
+-                  </label>
+-                  <div className="grid grid-cols-2 gap-2">
+-                    <button
+-                      disabled={auctionType === 'mini'}
+-                      onClick={() => setRtmEnabled(true)}
+-                      className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                        rtmEnabled 
+-                          ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+-                          : 'bg-[#0E0A06] border border-white/5 hover:border-white/10 disabled:cursor-not-allowed'
+-                      }`}
+-                    >
+-                      ON
+-                    </button>
+-                    <button
+-                      disabled={auctionType === 'mini'}
+-                      onClick={() => setRtmEnabled(false)}
+-                      className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                        !rtmEnabled && auctionType !== 'mini' 
+-                          ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+-                          : 'bg-[#0E0A06] border border-white/5 hover:border-white/10 disabled:cursor-not-allowed'
+-                      }`}
+-                    >
+-                      OFF
+-                    </button>
++                    {isNeutralHost ? (
++                      <div className="bg-[#ff6b35]/5 border border-[#ff6b35]/20 rounded-xl p-3.5 text-center shadow-inner">
++                        <span className="text-[11px] font-bold text-[#ff6b35] uppercase tracking-wider flex items-center justify-center gap-1">­ƒÄÖ´©Å Neutral Host Mode</span>
++                        <span className="text-[10px] text-[#8a7866] block mt-1.5 leading-normal">
++                          You will act as a spectator/neutral auctioneer. You won't control any franchise or draft players.
++                        </span>
++                      </div>
++                    ) : (
++                      <div className="space-y-2">
++                        {teamNamingType === 'real' ? (
++                          <div>
++                            <label className="text-[10px] uppercase tracking-widest text-[#8a7866] block mb-2 font-bold">Claim Franchise</label>
++                            <div className="grid grid-cols-2 gap-2 mt-2">
++                              {TEAMS.slice(0, numTeams).map(t => {
++                                const isSelected = selectedTeam === t.id;
++                                return (
++                                  <button
++                                    key={t.id}
++                                    type="button"
++                                    onClick={() => setSelectedTeam(t.id)}
++                                    className={`relative p-3 rounded-xl border flex flex-col items-center justify-center transition-all duration-300 ${
++                                      isSelected 
++                                        ? 'border-[#f5a623] scale-[1.03] shadow-[0_0_15px_rgba(245,166,35,0.4)]' 
++                                        : 'hover:scale-[1.03] hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]'
++                                    }`}
++                                    style={{
++                                      backgroundColor: isSelected 
++                                        ? `${t.color}25` // 15% opacity tint of team color
++                                        : `${t.color}08`, // 3% opacity tint
++                                      borderColor: isSelected 
++                                        ? '#f5a623' 
++                                        : `${t.color}30`, // 18% opacity border
++                                    }}
++                                  >
++                                    {/* Checkmark Badge */}
++                                    {isSelected && (
++                                      <div className="absolute -top-1.5 -right-1.5 bg-[#f5a623] text-[#0d0805] text-[9px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-[#1c1410] shadow-[0_0_6px_rgba(245,166,35,0.6)]">
++                                        Ô£ô
++                                      </div>
++                                    )}
++                                    
++                                    <img src={t.logo} alt={t.name} className="h-8 w-8 object-contain mb-1.5 drop-shadow-md" />
++                                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-white">{t.id}</span>
++                                    
++                                    <span className={`text-[8px] uppercase tracking-widest mt-1 font-bold ${
++                                      isSelected ? 'text-[#f5a623]' : 'text-white/40'
++                                    }`}>
++                                      {isSelected ? '­ƒææ claimed' : 'Available'}
++                                    </span>
++                                  </button>
++                                );
++                              })}
++                            </div>
++                          </div>
++                        ) : (
++                          <div>
++                            <label className="text-[10px] uppercase tracking-widest text-[#8a7866] block mb-2 font-bold">Claim Custom Franchise</label>
++                            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 bg-[#0d0805] border border-[#3a2a1a] rounded-xl">
++                              {customTeamNames.slice(0, numTeams).map((name, i) => {
++                                const displayName = name.trim() || `Team ${i + 1}`;
++                                const isSelected = selectedCustomTeamIndex === i;
++                                return (
++                                  <button
++                                    key={i}
++                                    type="button"
++                                    onClick={() => setSelectedCustomTeamIndex(i)}
++                                    className={`relative p-3 rounded-xl border text-left transition-all duration-300 ${
++                                      isSelected 
++                                        ? 'border-[#f5a623] bg-[#f5a623]/10 scale-[1.03] shadow-[0_0_15px_rgba(245,166,35,0.4)]' 
++                                        : 'border-white/5 bg-[#170e0a] hover:border-white/10 hover:scale-[1.03]'
++                                    }`}
++                                  >
++                                    {isSelected && (
++                                      <div className="absolute -top-1.5 -right-1.5 bg-[#f5a623] text-[#0d0805] text-[9px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-[#1c1410]">
++                                        Ô£ô
++                                      </div>
++                                    )}
++                                    <span className="text-[8px] font-bold text-white/30 block mb-0.5 uppercase tracking-wider">TEAM #{i+1}</span>
++                                    <span className="text-[10px] font-bold text-white block truncate">{displayName}</span>
++                                    <span className={`text-[8px] uppercase tracking-widest mt-1 font-bold block ${
++                                      isSelected ? 'text-[#f5a623]' : 'text-white/40'
++                                    }`}>
++                                      {isSelected ? '­ƒææ claimed' : 'Available'}
++                                    </span>
++                                  </button>
++                                );
++                              })}
++                            </div>
++                          </div>
++                        )}
++                      </div>
++                    )}
+                   </div>
+                 </div>
+ 
+-                {/* Time Per Bid */}
+-                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+-                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+-                    Time Per Bid Window
+-                  </label>
+-                  <div className="grid grid-cols-3 gap-2">
+-                    {[15, 30, 60].map((val) => (
++                {/* Column 2: Bidding Format */}
++                <div className="bg-[#1c1410] border border-[#3a2a1a] rounded-2xl p-6 shadow-xl space-y-6">
++                  <div className="relative pb-2 border-b border-white/5">
++                    <div className="absolute left-0 bottom-0 h-0.5 bg-gradient-to-r from-[#f5a623] to-[#ff6b35] w-12" />
++                    <h3 className="text-sm uppercase tracking-widest text-[#f5f0e8] font-extrabold flex items-center gap-2">
++                      <span className="text-[#f5a623]">ÔÅ▒´©Å</span> BIDDING FORMAT
++                    </h3>
++                  </div>
++                  
++                  {/* Bidding Style */}
++                  <div className="space-y-2">
++                    <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block">­ƒôó Bidding Style</label>
++                    <div className="relative flex p-1 bg-[#0d0805] border border-[#3a2a1a] rounded-full w-full select-none">
++                      {/* Sliding Background */}
++                      <div 
++                        className="absolute top-1 bottom-1 rounded-full bg-gradient-to-r from-[#f5a623] to-[#ff6b35] transition-all duration-300 ease-out shadow-[0_0_10px_rgba(245,166,35,0.4)]"
++                        style={{
++                          left: biddingStyle === 'silent' ? '50%' : '4px',
++                          width: 'calc(50% - 6px)'
++                        }}
++                      />
+                       <button
+-                        key={val}
+-                        onClick={() => setTimePerBid(val)}
+-                        className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                          timePerBid === val 
+-                            ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+-                            : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
++                        type="button"
++                        onClick={() => setBiddingStyle('open')}
++                        className={`relative z-10 w-1/2 text-center py-1.5 rounded-full font-bold text-[10px] uppercase tracking-wider transition duration-300 flex items-center justify-center gap-1.5 ${
++                          biddingStyle === 'open' ? 'text-[#0d0805]' : 'text-[#8a7866] hover:text-white'
+                         }`}
+                       >
+-                        {val} Sec
++                        <span>­ƒôó</span> Open Live
+                       </button>
+-                    ))}
++                      <button
++                        type="button"
++                        onClick={() => setBiddingStyle('silent')}
++                        className={`relative z-10 w-1/2 text-center py-1.5 rounded-full font-bold text-[10px] uppercase tracking-wider transition duration-300 flex items-center justify-center gap-1.5 ${
++                          biddingStyle === 'silent' ? 'text-[#0d0805]' : 'text-[#8a7866] hover:text-white'
++                        }`}
++                      >
++                        <span>­ƒöÆ</span> Silent Sealed
++                      </button>
++                    </div>
+                   </div>
+-                </div>
+ 
+-                {/* Player Pool Selection */}
+-                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5">
+-                  <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+-                    Player Pool
+-                  </label>
+-                  <div className="grid grid-cols-2 gap-2">
+-                    <button
+-                      onClick={() => setPoolSource('default')}
+-                      className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                        poolSource === 'default' 
+-                          ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+-                          : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+-                      }`}
+-                    >
+-                      Standard (47)
+-                    </button>
+-                    <button
+-                      onClick={() => setPoolSource('2025')}
+-                      className={`py-2 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                        poolSource === '2025' 
+-                          ? 'bg-[#FFB800] text-[#0E0A06] shadow-md shadow-[#FFB800]/15' 
+-                          : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+-                      }`}
+-                    >
+-                      2025 Auction (141)
+-                    </button>
++                  {/* Timer per Bid */}
++                  <div className="space-y-2">
++                    <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block flex items-center gap-1">
++                      <span>ÔÅ▒´©Å</span> Timer per Bid
++                    </label>
++                    <div className="relative flex p-1 bg-[#0d0805] border border-[#3a2a1a] rounded-full w-full select-none clock-animate-hover">
++                      {/* Sliding Background */}
++                      <div 
++                        className="absolute top-1 bottom-1 rounded-full bg-gradient-to-r from-[#f5a623] to-[#ff6b35] transition-all duration-300 ease-out shadow-[0_0_10px_rgba(245,166,35,0.4)]"
++                        style={{
++                          left: `calc(${[10, 15, 30].indexOf(timePerBid) * 33.33}% + 4px)`,
++                          width: 'calc(33.33% - 6px)'
++                        }}
++                      />
++                      {[10, 15, 30].map(val => (
++                        <button
++                          key={val}
++                          type="button"
++                          onClick={() => setTimePerBid(val)}
++                          className={`relative z-10 w-1/3 text-center py-1.5 rounded-full font-bold text-[10px] transition duration-300 flex items-center justify-center gap-1 ${
++                            timePerBid === val ? 'text-[#0d0805]' : 'text-[#8a7866] hover:text-white'
++                          }`}
++                        >
++                          <span className="clock-icon-emoji">ÔÅ▒´©Å</span> {val} Sec
++                        </button>
++                      ))}
++                    </div>
++                  </div>
++
++                  {/* Bid increment */}
++                  <div className="space-y-2">
++                    <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block">Open Bid Scale</label>
++                    <div className="bg-[#0d0805] border border-[#3a2a1a] rounded-xl p-3.5 space-y-3">
++                      <div className="flex items-center gap-2 text-xs font-bold text-white/80 border-b border-white/5 pb-2">
++                        <span>­ƒôê</span>
++                        <span className="uppercase tracking-wider">Increment Scale</span>
++                      </div>
++                      
++                      <div className="relative pl-6 space-y-4 border-l border-dashed border-[#3a2a1a]">
++                        <div className="relative">
++                          <div className="absolute -left-[31px] top-0.5 bg-[#f5a623] h-2.5 w-2.5 rounded-full border-2 border-[#1c1410] shadow-[0_0_8px_#f5a623]" />
++                          <div className="text-[11px] font-semibold text-white/90">Below Ôé╣1.00 Cr</div>
++                          <div className="text-[10px] text-[#8a7866] mt-0.5">Increments of <span className="text-[#f5a623] font-bold">+Ôé╣5 Lakhs</span></div>
++                        </div>
++                        
++                        <div className="relative">
++                          <div className="absolute -left-[31px] top-0.5 bg-[#ff6b35] h-2.5 w-2.5 rounded-full border-2 border-[#1c1410] shadow-[0_0_8px_#ff6b35]" />
++                          <div className="text-[11px] font-semibold text-white/90">Ôé╣1.00 Cr & Above</div>
++                          <div className="text-[10px] text-[#8a7866] mt-0.5">Increments of <span className="text-[#ff6b35] font-bold">+Ôé╣25 Lakhs</span></div>
++                        </div>
++                      </div>
++                    </div>
++                  </div>
++
++                  {/* Live increments preview */}
++                  <div className="bg-[#170e0a] border border-[#3a2a1a]/50 rounded-xl p-3.5 mt-2">
++                    <span className="text-[9px] uppercase tracking-widest text-[#8a7866] block font-bold mb-2">Live Increments Preview</span>
++                    <div className="grid grid-cols-2 gap-2 text-[10px]">
++                      <div className="bg-[#0d0805] p-2 rounded-lg border border-white/5">
++                        <div className="text-[#8a7866] mb-1">Standard Bid</div>
++                        <div className="flex items-center gap-1.5 font-bold text-[#f5a623]">
++                          <span>Ôé╣85L</span>
++                          <span>ÔåÆ</span>
++                          <span>Ôé╣90L</span>
++                        </div>
++                        <div className="text-[8px] text-white/40 mt-0.5 font-mono">(+Ôé╣5L raise)</div>
++                      </div>
++                      
++                      <div className="bg-[#0d0805] p-2 rounded-lg border border-white/5">
++                        <div className="text-[#8a7866] mb-1">Premium Bid</div>
++                        <div className="flex items-center gap-1.5 font-bold text-[#ff6b35]">
++                          <span>Ôé╣2.00Cr</span>
++                          <span>ÔåÆ</span>
++                          <span>Ôé╣2.25Cr</span>
++                        </div>
++                        <div className="text-[8px] text-white/40 mt-0.5 font-mono">(+Ôé╣25L raise)</div>
++                      </div>
++                    </div>
+                   </div>
+                 </div>
+ 
++                {/* Column 3: Rules & Custom Overrides */}
++                <div className="bg-[#1c1410] border border-[#3a2a1a] rounded-2xl p-6 shadow-xl space-y-6">
++                  <div className="relative pb-2 border-b border-white/5">
++                    <div className="absolute left-0 bottom-0 h-0.5 bg-gradient-to-r from-[#f5a623] to-[#ff6b35] w-12" />
++                    <h3 className="text-sm uppercase tracking-widest text-[#f5f0e8] font-extrabold flex items-center gap-2">
++                      <span className="text-[#f5a623]">ÔÜÖ´©Å</span> RULES & OVERRIDES
++                    </h3>
++                  </div>
++                  
++                  {/* Purse override & Roster Cap with steppers */}
++                  <div className="flex gap-4">
++                    <div className="flex-1 space-y-2">
++                      <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block">Purse (Cr)</label>
++                      <div className="flex items-center bg-[#0d0805] border border-[#3a2a1a] rounded-lg overflow-hidden focus-within:ring-1 focus-within:ring-[#f5a623] focus-within:border-[#f5a623] transition-all">
++                        <button 
++                          type="button" 
++                          onClick={() => setStartingPurse(prev => Math.max(10, prev - 5))}
++                          className="px-2.5 py-1.5 bg-[#170e0a] hover:bg-[#25150e] border-r border-[#3a2a1a] text-[#8a7866] hover:text-white transition font-bold"
++                        >
++                          -
++                        </button>
++                        <div className="flex items-center flex-grow justify-center px-1">
++                          <span className="text-[11px] text-[#8a7866] font-mono mr-0.5">Ôé╣</span>
++                          <input
++                            type="number"
++                            min={10}
++                            max={200}
++                            value={startingPurse}
++                            onChange={(e) => setStartingPurse(Number(e.target.value))}
++                            className="w-10 bg-transparent border-none text-xs focus:outline-none focus:ring-0 font-mono text-center text-white p-0"
++                          />
++                          <span className="text-[9px] text-[#8a7866] ml-0.5">Cr</span>
++                        </div>
++                        <button 
++                          type="button" 
++                          onClick={() => setStartingPurse(prev => Math.min(200, prev + 5))}
++                          className="px-2.5 py-1.5 bg-[#170e0a] hover:bg-[#25150e] border-l border-[#3a2a1a] text-[#8a7866] hover:text-white transition font-bold"
++                        >
++                          +
++                        </button>
++                      </div>
++                    </div>
+ 
+-                {/* Room Visibility & Code */}
+-                <div className="bg-[#1A1008] border border-white/5 rounded-xl p-5 md:col-span-2">
+-                  <div className="grid md:grid-cols-2 gap-4">
+-                    <div>
+-                      <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+-                        Room Visibility
+-                      </label>
+-                      <div className="grid grid-cols-2 gap-2">
+-                        <button
+-                          onClick={() => setRoomVisibility('public')}
+-                          className={`py-2.5 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                            roomVisibility === 'public' 
+-                              ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+-                              : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+-                          }`}
++                    <div className="flex-1 space-y-2">
++                      <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block">Roster Cap</label>
++                      <div className="flex items-center bg-[#0d0805] border border-[#3a2a1a] rounded-lg overflow-hidden focus-within:ring-1 focus-within:ring-[#f5a623] focus-within:border-[#f5a623] transition-all">
++                        <button 
++                          type="button" 
++                          onClick={() => setPlayersPerTeam(prev => Math.max(10, prev - 1))}
++                          className="px-2.5 py-1.5 bg-[#170e0a] hover:bg-[#25150e] border-r border-[#3a2a1a] text-[#8a7866] hover:text-white transition font-bold"
+                         >
+-                          Public
++                          -
+                         </button>
+-                        <button
+-                          onClick={() => setRoomVisibility('private')}
+-                          className={`py-2.5 rounded font-bold text-xs uppercase tracking-wider transition ${
+-                            roomVisibility === 'private' 
+-                              ? 'bg-[#FF6B00] text-white shadow-md shadow-[#FF6B00]/15' 
+-                              : 'bg-[#0E0A06] border border-white/5 hover:border-white/10'
+-                          }`}
++                        <div className="flex items-center flex-grow justify-center px-1">
++                          <input
++                            type="number"
++                            min={10}
++                            max={30}
++                            value={playersPerTeam}
++                            onChange={(e) => setPlayersPerTeam(Number(e.target.value))}
++                            className="w-10 bg-transparent border-none text-xs focus:outline-none focus:ring-0 font-mono text-center text-white p-0"
++                          />
++                          <span className="text-[9px] text-[#8a7866] ml-0.5">Slots</span>
++                        </div>
++                        <button 
++                          type="button" 
++                          onClick={() => setPlayersPerTeam(prev => Math.min(30, prev + 1))}
++                          className="px-2.5 py-1.5 bg-[#170e0a] hover:bg-[#25150e] border-l border-[#3a2a1a] text-[#8a7866] hover:text-white transition font-bold"
+                         >
+-                          Private
++                          +
+                         </button>
+                       </div>
+                     </div>
++                  </div>
++
++                  {/* Max Overseas & RTM toggle side by side */}
++                  <div className="flex gap-4">
++                    <div className="flex-grow space-y-2">
++                      <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block">­ƒîì Max Overseas</label>
++                      <CustomSelect
++                        value={maxOverseas}
++                        onChange={setMaxOverseas}
++                        options={maxOverseasOptions}
++                        icon="­ƒîì"
++                      />
++                    </div>
+ 
+-                    {roomVisibility === 'private' && (
+-                      <div className="animate-fade-up">
+-                        <label className="text-xs uppercase tracking-widest text-white/50 font-bold block mb-3">
+-                          Custom Room Code (6 chars)
+-                        </label>
+-                        <input
+-                          type="text"
+-                          maxLength={6}
+-                          placeholder="e.g. DRAFT9"
+-                          value={privateCode}
+-                          onChange={(e) => setPrivateCode(e.target.value.toUpperCase())}
+-                          className="w-full bg-[#0E0A06] border border-white/10 rounded px-4 py-2 text-sm focus:outline-none focus:border-[#FFB800] uppercase font-mono tracking-widest text-center"
+-                        />
++                    {auctionType === 'mini' && (
++                      <div className="flex-grow space-y-2">
++                        <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block">­ƒâÅ RTM Cards</label>
++                        <div className="relative flex p-1 bg-[#0d0805] border border-[#3a2a1a] rounded-full w-full select-none">
++                          <div 
++                            className="absolute top-1 bottom-1 rounded-full bg-gradient-to-r from-[#f5a623] to-[#ff6b35] transition-all duration-300 ease-out shadow-[0_0_10px_rgba(245,166,35,0.4)]"
++                            style={{
++                              left: rtmEnabled ? '4px' : '50%',
++                              width: 'calc(50% - 6px)'
++                            }}
++                          />
++                          <button
++                            type="button"
++                            onClick={() => setRtmEnabled(true)}
++                            className={`relative z-10 w-1/2 text-center py-1 rounded-full font-bold text-[9px] uppercase tracking-wider transition duration-300 ${
++                              rtmEnabled ? 'text-[#0d0805]' : 'text-[#8a7866] hover:text-white'
++                            }`}
++                          >
++                            Yes
++                          </button>
++                          <button
++                            type="button"
++                            onClick={() => setRtmEnabled(false)}
++                            className={`relative z-10 w-1/2 text-center py-1 rounded-full font-bold text-[9px] uppercase tracking-wider transition duration-300 ${
++                              !rtmEnabled ? 'text-[#0d0805]' : 'text-[#8a7866] hover:text-white'
++                            }`}
++                          >
++                            No
++                          </button>
++                        </div>
+                       </div>
+                     )}
+                   </div>
+-                </div>
+ 
+-              </div>
++                  {/* Base Prices */}
++                  <div className="space-y-2">
++                    <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block">­ƒÆ░ Base Price Mode</label>
++                    <CustomSelect
++                      value={basePriceRule}
++                      onChange={setBasePriceRule}
++                      options={basePriceRuleOptions}
++                      icon="­ƒÆ░"
++                    />
++                    
++                    {basePriceRule === 'custom' && (
++                      <div className="mt-2 flex items-center bg-[#0d0805] border border-[#3a2a1a] rounded-lg overflow-hidden focus-within:ring-1 focus-within:ring-[#f5a623] focus-within:border-[#f5a623] transition-all">
++                        <button 
++                          type="button" 
++                          onClick={() => setCustomBasePrice(prev => Math.max(1000000, prev - 5000000))} // -50L
++                          className="px-2.5 py-1.5 bg-[#170e0a] hover:bg-[#25150e] border-r border-[#3a2a1a] text-[#8a7866] hover:text-white transition font-bold"
++                        >
++                          -
++                        </button>
++                        <div className="flex items-center flex-grow justify-center px-1">
++                          <span className="text-[10px] text-[#8a7866] font-mono mr-1">Ôé╣</span>
++                          <input
++                            type="number"
++                            value={customBasePrice}
++                            onChange={(e) => setCustomBasePrice(Number(e.target.value))}
++                            placeholder="Base Price"
++                            className="w-20 bg-transparent border-none text-xs focus:outline-none focus:ring-0 font-mono text-center text-white p-0"
++                          />
++                          <span className="text-[9px] text-[#8a7866] ml-1">
++                            {customBasePrice >= 10000000 
++                              ? `${(customBasePrice / 10000000).toFixed(1)}Cr` 
++                              : `${(customBasePrice / 100000).toFixed(0)}L`}
++                          </span>
++                        </div>
++                        <button 
++                          type="button" 
++                          onClick={() => setCustomBasePrice(prev => Math.min(50000000, prev + 5000000))} // +50L
++                          className="px-2.5 py-1.5 bg-[#170e0a] hover:bg-[#25150e] border-l border-[#3a2a1a] text-[#8a7866] hover:text-white transition font-bold"
++                        >
++                          +
++                        </button>
++                      </div>
++                    )}
++                  </div>
++
++                  {/* Categories */}
++                  <div className="space-y-2">
++                    <label className="text-[10px] uppercase tracking-widest text-[#8a7866] font-bold block">­ƒÄ» Player Pool Category</label>
++                    <CustomSelect
++                      value={playerCategory}
++                      onChange={setPlayerCategory}
++                      options={playerCategoryOptions}
++                      icon="­ƒÄ»"
++                    />
++                    
++                    {playerCategory === 'custom' && (
++                      <textarea
++                        rows={2}
++                        placeholder='[{"name":"Virat Kohli","role":"Batter","basePrice":20000000}]'
++                        value={customPlayersJSON}
++                        onChange={(e) => setCustomPlayersJSON(e.target.value)}
++                        className="w-full bg-[#0d0805] border border-[#3a2a1a] rounded-lg p-2.5 text-[9px] focus:outline-none focus:border-[#f5a623] font-mono text-white/80 mt-1.5"
++                      />
++                    )}
++                  </div>
++
++                  {/* Live summary preview card */}
++                  <div className="bg-[#170e0a] border border-[#3a2a1a]/50 rounded-xl p-3.5 mt-4">
++                    <div className="flex gap-2">
++                      <span className="text-[#f5a623] text-sm">Ôä╣´©Å</span>
++                      <div>
++                        <span className="text-[9px] uppercase tracking-widest text-[#8a7866] block font-bold mb-1">Configuration Summary</span>
++                        <p className="text-[10px] text-white/70 leading-relaxed">
++                          {getLiveSummaryText()}
++                        </p>
++                      </div>
++                    </div>
++                  </div>
++                </div>
+ 
+-              {/* Step Navigation */}
+-              <div className="flex gap-4 w-full max-w-xs mt-4">
+-                <button 
+-                  onClick={() => setStep(2)}
+-                  className="flex-1 bg-[#1A1008] hover:bg-white/5 border border-white/10 hover:border-white/20 py-3 rounded-lg font-bold tracking-widest uppercase text-xs transition"
+-                >
+-                  Back
+-                </button>
+-                <button 
+-                  onClick={() => setStep(4)}
+-                  className="flex-1 bg-[#FF6B00] hover:bg-[#FF6B00]/80 py-3 rounded-lg font-bold tracking-widest uppercase text-xs transition text-white shadow-lg shadow-[#FF6B00]/25"
+-                >
+-                  Review
+-                </button>
+               </div>
+             </div>
+ 
+             {/* ÔòÉÔòÉ STEP 4: REVIEW & LAUNCH ÔòÉÔòÉ */}
+             <div className="w-1/4 h-full flex-shrink-0 flex flex-col justify-start items-center px-4 overflow-y-auto">
+-              <h1 className="text-3xl md:text-5xl font-heading text-center mb-6 text-[#FFB800] tracking-wide animate-fade-up">
+-                DRAFT BOARD PREVIEW
++              <h1 className="text-3xl md:text-5xl font-heading text-center mb-6 text-[#FFB800] tracking-wide">
++                ARENA SPECIFICATIONS
+               </h1>
+               
+-              <div className="bg-[#1A1008] border border-white/5 rounded-2xl p-8 w-full max-w-2xl shadow-2xl relative mb-8">
+-                {/* Flame effect overlay */}
+-                <div className="absolute inset-0 bg-radial-gradient from-[#FF6B00]/5 via-transparent to-transparent pointer-events-none rounded-2xl" />
+-
+-                <div className="grid grid-cols-2 md:grid-cols-3 gap-6 relative z-10 text-left">
++              <div className="bg-[#1A1008] border border-white/5 rounded-2xl p-8 w-full max-w-2xl shadow-2xl relative mb-8 text-left">
++                <div className="grid grid-cols-2 md:grid-cols-3 gap-6 relative z-10">
+                   
+-                  {/* Mode */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Auction Mode</span>
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Simulation Year</span>
+                     <span className="font-heading text-xl text-[#FFB800] tracking-wide mt-1 block">
+-                      {auctionType === 'mini' ? '­ƒÅÅ MINI' : '­ƒöÑ MEGA'}
++                      {auctionYear}
+                     </span>
+                   </div>
+ 
+-                  {/* Franchise */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Your Franchise</span>
+-                    <span className="font-heading text-xl text-white tracking-wide mt-1 flex items-center gap-1.5">
+-                      <span 
+-                        style={{ backgroundColor: TEAMS.find(t=>t.id === selectedTeam)?.color }}
+-                        className="w-3 h-3 rounded-full inline-block"
+-                      />
+-                      {selectedTeam}
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Bidding Format</span>
++                    <span className="font-heading text-xl text-white tracking-wide mt-1 block uppercase">
++                      Open Live
+                     </span>
+                   </div>
+ 
+-                  {/* Purse */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Starting Purse</span>
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Total Purse</span>
+                     <span className="font-heading text-xl text-[#FF6B00] tracking-wide mt-1 block">
+                       Ôé╣{startingPurse}CR
+                     </span>
+                   </div>
+ 
+-                  {/* Squad Limit */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Squad Size</span>
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Squad Limit</span>
+                     <span className="font-bold text-sm text-white mt-1.5 block">
+-                      {playersPerTeam} Players Max
++                      {playersPerTeam} Max ({maxOverseas} Overseas)
+                     </span>
+                   </div>
+ 
+-                  {/* Overseas Limit */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Overseas Max</span>
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Total Franchises</span>
+                     <span className="font-bold text-sm text-white mt-1.5 block">
+-                      {maxOverseas} Players
++                      {numTeams} Participating
+                     </span>
+                   </div>
+ 
+-                  {/* Increment */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Bid Increment</span>
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Base Price</span>
+                     <span className="font-bold text-sm text-white mt-1.5 block">
+-                      Ôé╣{bidIncrement === 500000 ? '5 Lakhs' : bidIncrement === 1000000 ? '10 Lakhs' : '25 Lakhs'}
++                      {basePriceRule === 'real' ? 'Real IPL Prices' : `Ôé╣${customBasePrice / 100000} Lakhs`}
+                     </span>
+                   </div>
+ 
+-                  {/* RTM cards */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">RTM Cards</span>
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Timer per Bid</span>
+                     <span className="font-bold text-sm text-white mt-1.5 block">
+-                      {rtmEnabled ? 'Enabled (ON)' : 'Disabled (OFF)'}
++                      {timePerBid} Seconds
+                     </span>
+                   </div>
+ 
+-                  {/* Visibility */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Visibility</span>
+-                    <span className="font-bold text-sm text-white mt-1.5 block uppercase tracking-wider">
+-                      {roomVisibility}
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">RTM Cards</span>
++                    <span className="font-bold text-sm text-white mt-1.5 block">
++                      {rtmEnabled ? 'Enabled' : 'Disabled'}
+                     </span>
+                   </div>
+ 
+-                  {/* Player Pool */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Player Pool</span>
+-                    <span className="font-bold text-sm text-white mt-1.5 block">
+-                      {poolSource === 'default' ? 'Standard (47)' : '2025 Auction (141)'}
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Player Category</span>
++                    <span className="font-bold text-sm text-white mt-1.5 block uppercase">
++                      {playerCategory}
+                     </span>
+                   </div>
+ 
+-                  {/* Time limit */}
+                   <div>
+-                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Bid Timer</span>
+-                    <span className="font-bold text-sm text-white mt-1.5 block">
+-                      {timePerBid} Seconds
++                    <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold">Your Franchise</span>
++                    <span className="font-bold text-sm text-[#FFB800] mt-1.5 block uppercase truncate">
++                      {isNeutralHost ? '­ƒÄÖ´©Å Neutral Host' : (teamNamingType === 'custom' ? (customTeamNames[selectedCustomTeamIndex] || `Team ${selectedCustomTeamIndex + 1}`) : selectedTeam)}
+                     </span>
+                   </div>
+ 
+@@ -692,7 +1106,7 @@ const CreateRoom = () => {
+                 <div className="mt-8 pt-6 border-t border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4 z-10 relative">
+                   <div>
+                     <span className="text-[10px] uppercase tracking-widest text-white/40 block font-bold mb-1">
+-                      Room Access Code
++                      Arena Code
+                     </span>
+                     <span className="font-mono text-2xl font-black text-[#FFB800] tracking-widest bg-[#0E0A06] border border-white/5 px-4 py-1.5 rounded-lg">
+                       {roomVisibility === 'private' && privateCode ? privateCode : generatedCode}
+@@ -703,29 +1117,11 @@ const CreateRoom = () => {
+                     onClick={handleCopyCode}
+                     className="bg-[#0E0A06] hover:bg-[#1A1008] border border-white/10 hover:border-[#FFB800] text-xs font-bold uppercase tracking-widest px-4 py-2.5 rounded-lg transition"
+                   >
+-                    {copied ? 'Ô£ô Copied!' : '­ƒôï Copy Room Code'}
++                    {copied ? 'Ô£ô Copied!' : '­ƒôï Copy Access Code'}
+                   </button>
+                 </div>
+               </div>
+ 
+-              {/* Action Buttons */}
+-              <div className="flex flex-col gap-4 w-full max-w-sm">
+-                <button
+-                  disabled={isSubmitting}
+-                  onClick={handleLaunch}
+-                  className="w-full bg-[#FFB800] hover:bg-[#FFB800]/90 text-[#0E0A06] font-black uppercase text-sm tracking-widest py-4 rounded-xl transition-all duration-300 transform hover:-translate-y-1 shadow-lg shadow-[#FFB800]/25 hover:shadow-[0_0_35px_rgba(255,184,0,0.4)] disabled:opacity-50 disabled:cursor-not-allowed text-center"
+-                >
+-                  {isSubmitting ? 'GENERATING DRAFT ARENA...' : 'ÔÜí LAUNCH AUCTION'}
+-                </button>
+-
+-                <button 
+-                  onClick={() => setStep(3)}
+-                  disabled={isSubmitting}
+-                  className="w-full bg-[#1A1008] hover:bg-white/5 border border-white/10 hover:border-white/20 py-3 rounded-lg font-bold tracking-widest uppercase text-xs transition"
+-                >
+-                  Back to Settings
+-                </button>
+-              </div>
+             </div>
+ 
+           </div>
+@@ -733,10 +1129,60 @@ const CreateRoom = () => {
+       </main>
+ 
+       {/* ÔöÇÔöÇÔöÇ FOOTER ÔöÇÔöÇÔöÇ */}
+-      <footer className="max-w-6xl mx-auto w-full text-center text-[10px] uppercase tracking-widest text-white/20 mt-6 pt-4 border-t border-white/5">
+-        IPL Auction Live Simulator ÔÇó Fire & Gold Theme Enabled
++      <footer className="max-w-6xl mx-auto w-full text-center text-[10px] uppercase tracking-widest text-white/20 mt-6 pt-4 border-t border-white/5 mb-16">
++        IPL Auction Live Simulator ÔÇó Setup Panel
+       </footer>
+ 
++      {/* Sticky Bottom Action Bar */}
++      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#1c1410]/95 backdrop-blur-md border-t border-[#3a2a1a] px-6 py-4 shadow-[0_-8px_30px_rgba(0,0,0,0.5)]">
++        <div className="max-w-6xl mx-auto flex justify-between items-center">
++          {/* Left: Back Button */}
++          {step > 1 ? (
++            <button
++              onClick={() => setStep(step - 1)}
++              className="text-xs uppercase tracking-widest border border-white/10 hover:border-[#f5a623] hover:text-[#f5a623] px-5 py-2.5 rounded bg-[#0d0805] text-white/85 hover:bg-[#1a0f08] transition-all duration-300 font-bold"
++            >
++              Back
++            </button>
++          ) : (
++            <div className="w-16" />
++          )}
++
++          {/* Center: Progress indicator */}
++          <div className="flex flex-col items-center">
++            <span className="text-[9px] uppercase tracking-widest text-[#8a7866] font-bold">
++              STEP {step} OF 4
++            </span>
++            <span className="text-[11px] font-semibold text-white/90 mt-0.5 tracking-wider uppercase font-mono">
++              {step === 1 && 'Select Auction Mode'}
++              {step === 2 && 'Select Year'}
++              {step === 3 && 'Configure Room Settings'}
++              {step === 4 && 'Launch Arena'}
++            </span>
++          </div>
++
++          {/* Right: Continue / Launch Button */}
++          {step < 4 ? (
++            <button
++              onClick={() => setStep(step + 1)}
++              className="bg-gradient-to-r from-[#f5a623] to-[#ff6b35] hover:from-[#ff6b35] hover:to-[#f5a623] text-[#0d0805] font-black py-2.5 px-6 rounded-lg text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-[1.03] shadow-lg shadow-[#f5a623]/25"
++            >
++              {step === 1 && 'Proceed to Year Selection'}
++              {step === 2 && 'Proceed to Settings'}
++              {step === 3 && 'Continue to Arena Specifications'}
++            </button>
++          ) : (
++            <button
++              disabled={isSubmitting}
++              onClick={handleLaunch}
++              className="bg-gradient-to-r from-[#f5a623] to-[#ff6b35] hover:from-[#ff6b35] hover:to-[#f5a623] text-[#0d0805] font-black uppercase text-xs tracking-widest py-2.5 px-6 rounded-lg transition-all duration-300 transform hover:scale-[1.03] shadow-lg shadow-[#f5a623]/25 disabled:opacity-50 disabled:cursor-not-allowed animate-pulse"
++            >
++              {isSubmitting ? 'Establishing Arena...' : 'ÔÜí Launch Auction'}
++            </button>
++          )}
++        </div>
++      </div>
++
+     </div>
+   );
+ };

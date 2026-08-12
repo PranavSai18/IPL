@@ -1,8 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Settings, Trophy, Coins, Gavel, Zap, Users, Briefcase } from 'lucide-react';
+
+const formatPrice = (val) => {
+  if (!val) return '₹0';
+  if (val >= 10000000) return `₹${(val / 10000000).toFixed(2).replace(/\.00$/, '')}CR`;
+  return `₹${(val / 100000).toFixed(0)}L`;
+};
 
 /* ══════════════════════════════════════════════════════════════════
    PLAYER DATA
@@ -183,26 +189,28 @@ const CricketBallCursor = () => {
 
   return (
     <>
-      <div style={{ position: 'fixed', left: trail.x - 6, top: trail.y - 6, width: 12, height: 12, borderRadius: '50%', background: 'rgba(255,107,0,0.55)', boxShadow: '0 0 10px rgba(255,107,0,0.9)', zIndex: 99999, pointerEvents: 'none' }} />
-      <div style={{ position: 'fixed', left: ball.x - 14, top: ball.y - 14, width: 28, height: 28, zIndex: 100000, pointerEvents: 'none', transform: `rotate(${ball.rot}deg)`, willChange: 'transform' }}>
+      <div style={{ position: 'fixed', left: trail.x - 6, top: trail.y - 6, width: 12, height: 12, borderRadius: '50%', background: 'rgba(240, 249, 255, 0.7)', boxShadow: '0 0 10px rgba(14, 165, 233, 0.8), 0 0 20px rgba(56, 189, 248, 0.5)', zIndex: 99999, pointerEvents: 'none' }} />
+      <div style={{ position: 'fixed', left: ball.x - 14, top: ball.y - 14, width: 28, height: 28, zIndex: 100000, pointerEvents: 'none', transform: `rotate(${ball.rot}deg)`, willChange: 'transform', filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.85)) drop-shadow(0 0 10px rgba(56,189,248,0.45))' }}>
         <svg viewBox="0 0 28 28" fill="none" width="28" height="28">
           <defs>
             <radialGradient id="bg2" cx="35%" cy="30%" r="65%">
-              <stop offset="0%" stopColor="#FF2222" />
-              <stop offset="100%" stopColor="#880000" />
+              <stop offset="0%" stopColor="#FFFFFF" />
+              <stop offset="40%" stopColor="#ECEFF1" />
+              <stop offset="90%" stopColor="#CFD8DC" />
+              <stop offset="100%" stopColor="#90A4AE" />
             </radialGradient>
           </defs>
           <circle cx="14" cy="14" r="13" fill="url(#bg2)" />
-          <path d="M4.5 14C4.5 7.5 9 3.5 14 3.5C19 3.5 23.5 7.5 23.5 14" stroke="white" strokeWidth="1.1" fill="none" strokeLinecap="round" />
-          <path d="M4.5 14C4.5 20.5 9 24.5 14 24.5C19 24.5 23.5 20.5 23.5 14" stroke="white" strokeWidth="1.1" fill="none" strokeLinecap="round" />
-          <line x1="7.5"  y1="8.5"  x2="9.5"  y2="10.5" stroke="white" strokeWidth="0.65" />
-          <line x1="8"    y1="11.5" x2="10"   y2="13"   stroke="white" strokeWidth="0.65" />
-          <line x1="7.5"  y1="17.5" x2="9.5"  y2="15.5" stroke="white" strokeWidth="0.65" />
-          <line x1="8"    y1="14.5" x2="10"   y2="13"   stroke="white" strokeWidth="0.65" />
-          <line x1="20.5" y1="8.5"  x2="18.5" y2="10.5" stroke="white" strokeWidth="0.65" />
-          <line x1="20"   y1="11.5" x2="18"   y2="13"   stroke="white" strokeWidth="0.65" />
-          <line x1="20.5" y1="17.5" x2="18.5" y2="15.5" stroke="white" strokeWidth="0.65" />
-          <line x1="20"   y1="14.5" x2="18"   y2="13"   stroke="white" strokeWidth="0.65" />
+          <path d="M4.5 14C4.5 7.5 9 3.5 14 3.5C19 3.5 23.5 7.5 23.5 14" stroke="#B71C1C" strokeWidth="1.15" fill="none" strokeLinecap="round" />
+          <path d="M4.5 14C4.5 20.5 9 24.5 14 24.5C19 24.5 23.5 20.5 23.5 14" stroke="#B71C1C" strokeWidth="1.15" fill="none" strokeLinecap="round" />
+          <line x1="7.5"  y1="8.5"  x2="9.5"  y2="10.5" stroke="#B71C1C" strokeWidth="0.7" />
+          <line x1="8"    y1="11.5" x2="10"   y2="13"   stroke="#B71C1C" strokeWidth="0.7" />
+          <line x1="7.5"  y1="17.5" x2="9.5"  y2="15.5" stroke="#B71C1C" strokeWidth="0.7" />
+          <line x1="8"    y1="14.5" x2="10"   y2="13"   stroke="#B71C1C" strokeWidth="0.7" />
+          <line x1="20.5" y1="8.5"  x2="18.5" y2="10.5" stroke="#B71C1C" strokeWidth="0.7" />
+          <line x1="20"   y1="11.5" x2="18"   y2="13"   stroke="#B71C1C" strokeWidth="0.7" />
+          <line x1="20.5" y1="17.5" x2="18.5" y2="15.5" stroke="#B71C1C" strokeWidth="0.7" />
+          <line x1="20"   y1="14.5" x2="18"   y2="13"   stroke="#B71C1C" strokeWidth="0.7" />
         </svg>
       </div>
     </>
@@ -508,6 +516,13 @@ const PlayerCarousel = () => {
 /* ══════════════════════════════════════════════════════════════════
    HELPERS
 ══════════════════════════════════════════════════════════════════ */
+const generateRoomCode = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  return Array.from({ length: 6 }, () =>
+    chars[Math.floor(Math.random() * chars.length)]
+  ).join('');
+};
+
 const fadeUp = (delay, mounted) => ({
   opacity:    mounted ? 1 : 0,
   transform:  mounted ? 'translateY(0px)' : 'translateY(28px)',
@@ -525,6 +540,12 @@ const Landing = () => {
   const [showModal,   setShowModal]   = useState(false);
   const [name,        setName]        = useState('');
   const [error,       setError]       = useState('');
+  const [authRedirectTarget, setAuthRedirectTarget] = useState('/lobby');
+
+  const handleAuthClick = (target) => {
+    setAuthRedirectTarget(target);
+    setShowModal(true);
+  };
   const [mounted,     setMounted]     = useState(false);
   const [typeText,    setTypeText]    = useState('');
   const [cursorBlink, setCursorBlink] = useState(true);
@@ -554,7 +575,10 @@ const Landing = () => {
   const [createPrivateCode, setCreatePrivateCode] = useState('');
   const [createMaxOverseas, setCreateMaxOverseas] = useState(4);
   const [createPoolSource, setCreatePoolSource] = useState('default'); // 'default' | '2025'
-  const [createGeneratedCode, setCreateGeneratedCode] = useState('');
+  const [createGeneratedCode] = useState(() => {
+    try { return generateRoomCode() || Math.random().toString(36).substring(2, 8).toUpperCase(); }
+    catch { return Math.random().toString(36).substring(2, 8).toUpperCase(); }
+  });
   const [createCopied, setCreateCopied] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createIsSubmitting, setCreateIsSubmitting] = useState(false);
@@ -591,19 +615,16 @@ const Landing = () => {
   };
 
 
-  // Generate code on mount
-  useEffect(() => {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    setCreateGeneratedCode(code);
-  }, []);
 
   // Update RTM setting when auction type changes
   useEffect(() => {
-    if (createAuctionType === 'mini') {
-      setCreateRtmEnabled(false);
-    } else {
-      setCreateRtmEnabled(true);
-    }
+    setTimeout(() => {
+      if (createAuctionType === 'mini') {
+        setCreateRtmEnabled(false);
+      } else {
+        setCreateRtmEnabled(true);
+      }
+    }, 0);
   }, [createAuctionType]);
 
   const handleLaunchRoom = async () => {
@@ -674,7 +695,10 @@ const Landing = () => {
       if (err.response?.status === 401) {
         setCreateError('Your session has expired. Please enter your name to authenticate and launch the auction.');
       } else {
-        setCreateError(err.response?.data?.error || 'Failed to create room. Please try again.');
+        setCreateError(
+          err.response?.data?.error ||
+          (err.request ? 'Failed to connect to backend server. Please make sure the server is running on port 5000.' : 'Failed to create room. Please try again.')
+        );
       }
       setCreateIsSubmitting(false);
     }
@@ -799,7 +823,8 @@ const Landing = () => {
     try {
       const res = await axios.post('http://localhost:5000/api/auth/login', { name });
       login(res.data.user, res.data.token);
-      navigate('/lobby');
+      setShowModal(false);
+      navigate(authRedirectTarget);
     } catch (err) {
       setError(err.response?.data?.error || 'An error occurred');
     }
@@ -831,8 +856,11 @@ const Landing = () => {
                   if (l === 'How to Play') {
                     howToPlayRef.current?.scrollIntoView({ behavior: 'smooth' });
                   } else if (l === 'Auction') {
-                    setCreateStep(1);
-                    setShowCreateModal(true);
+                    if (user) {
+                      navigate('/room/create');
+                    } else {
+                      handleAuthClick('/room/create');
+                    }
                   } else if (l === 'Teams') {
                     setShowTeamsModal(true);
                   } else if (l === 'Players') {
@@ -857,7 +885,7 @@ const Landing = () => {
             <button className="btn-outline-gold" style={{ padding: '0.45rem 1.1rem', fontSize: '0.68rem' }}>
               Live Auctions
             </button>
-            <button className="btn-orange" onClick={() => setShowModal(true)} style={{ padding: '0.45rem 1.1rem', fontSize: '0.68rem' }}>
+            <button className="btn-orange" onClick={() => user ? navigate('/room/join') : handleAuthClick('/room/join')} style={{ padding: '0.45rem 1.1rem', fontSize: '0.68rem' }}>
               Join Room
             </button>
           </div>
@@ -898,10 +926,10 @@ const Landing = () => {
 
             {/* CTA Buttons */}
             <div style={{ ...fadeUp(0.52, mounted), display: 'flex', gap: '1rem', marginBottom: '3.5rem' }}>
-              <button className="btn-gold" onClick={() => { setCreateStep(1); setShowCreateModal(true); }} style={{ padding: '0.9rem 2.1rem', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button className="btn-gold" onClick={() => user ? navigate('/room/create') : handleAuthClick('/room/create')} style={{ padding: '0.9rem 2.1rem', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Briefcase size={18} /> Create Room
               </button>
-              <button className="btn-orange" onClick={() => setShowModal(true)} style={{ padding: '0.9rem 2.1rem', fontSize: '0.82rem' }}>
+              <button className="btn-orange" onClick={() => user ? navigate('/room/join') : handleAuthClick('/room/join')} style={{ padding: '0.9rem 2.1rem', fontSize: '0.82rem' }}>
                 🎯 Join Room
               </button>
             </div>
@@ -1363,6 +1391,30 @@ const Landing = () => {
             }
           }}
         >
+          {createIsSubmitting && (
+            <div className="fixed inset-0 bg-[#0E0A06]/95 backdrop-blur-md z-[10000] flex flex-col items-center justify-center font-['Inter'] text-white">
+              <div className="flex flex-col items-center gap-6 max-w-md w-full text-center p-8 border border-[#FF6B00]/25 rounded-2xl bg-[#1A1008] shadow-[0_0_50px_rgba(255,107,0,0.15)] relative">
+                <div className="absolute top-[-10%] left-[20%] w-[300px] h-[300px] rounded-full bg-[#FF6B00]/5 blur-[80px] pointer-events-none" />
+                
+                <span className="text-5xl animate-bounce">🏟️</span>
+                <h2 className="text-2xl font-heading text-[#FFB800] tracking-widest font-black uppercase">Creating Your Draft Arena...</h2>
+                
+                {/* Animated progress bar */}
+                <div className="w-64 h-1.5 bg-white/5 rounded-full overflow-hidden relative">
+                  <div className="h-full bg-gradient-to-r from-[#FF6B00] to-[#FFB800] rounded-full animate-pulse w-full" />
+                </div>
+
+                <div className="space-y-3 text-xs uppercase tracking-widest text-[#C8A060] font-bold">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="inline-block h-2 w-2 rounded-full bg-[#FF6B00] animate-ping" />
+                    <span>Setting up player pool...</span>
+                  </div>
+                  <div className="text-white/40">Configuring franchises...</div>
+                  <div className="text-white/40">Generating Arena Code...</div>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Modal Container */}
           <div
             style={{
@@ -1953,8 +2005,17 @@ const Landing = () => {
                   </h2>
 
                   {createError && (
-                    <div style={{ background: 'rgba(255,107,0,0.1)', border: '1px solid #FF6B00', color: '#FF6B00', padding: '0.5rem 1rem', borderRadius: '6px', marginBottom: '0.75rem', fontSize: '0.78rem', textAlign: 'center', width: '100%', maxWidth: '500px' }}>
-                      {createError}
+                    <div style={{ background: 'rgba(255,107,0,0.1)', border: '1px solid #FF6B00', color: '#FF6B00', padding: '0.75rem 1rem', borderRadius: '10px', marginBottom: '0.75rem', fontSize: '0.78rem', textAlign: 'center', width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
+                      <span className="font-bold">⚠️ Room creation failed:</span>
+                      <span>{createError}</span>
+                      <button 
+                        onClick={handleLaunchRoom}
+                        style={{ marginTop: '0.4rem', background: '#FF6B00', color: '#white', fontWeight: 'bold', fontSize: '0.7rem', padding: '0.3rem 0.75rem', borderRadius: '6px', cursor: 'pointer', border: 'none' }}
+                        onMouseEnter={(e) => e.target.style.filter = 'brightness(1.1)'}
+                        onMouseLeave={(e) => e.target.style.filter = 'none'}
+                      >
+                        TRY AGAIN
+                      </button>
                     </div>
                   )}
 
@@ -2848,14 +2909,17 @@ const Landing = () => {
               </div>
 
               <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.2rem', color: '#FFB800', margin: '0 0 0.5rem 0', letterSpacing: '0.05em' }}>
-                IPL CHAMPIONS CLUB GATEWAY
+                BUY US A CHAI ☕
               </h2>
-              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', lineHeight: 1.5, margin: '0 0 2rem 0', maxWidth: '350px' }}>
-                Scan the UPI QR Code below to validate your tournament entry fee or buy premium lobby status.
+              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem', lineHeight: 1.6, margin: '0 0 1rem 0', maxWidth: '380px' }}>
+                This IPL Auction Simulator is a completely free, fun project built just for the love of the game. No entry fees, no premium tiers — just pure cricket entertainment!
+              </p>
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', lineHeight: 1.5, margin: '0 0 2rem 0', maxWidth: '380px' }}>
+                If you enjoyed the experience and want to show some appreciation, you can buy us a chai ☕ by contributing just ₹10 — totally optional, totally voluntary, and totally heartwarming. 🙏
               </p>
 
               {/* QR Scanner Box */}
-              <div style={{ width: '220px', height: '220px', background: '#0E0A06', border: '3px solid #FF6B00', borderRadius: '16px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 30px rgba(255,107,0,0.25)', background: '#1A1008', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ width: '220px', height: '220px', border: '3px solid #FF6B00', borderRadius: '16px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 30px rgba(255,107,0,0.25)', background: '#1A1008', position: 'relative', overflow: 'hidden' }}>
                 {/* Outer scan line animations */}
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '3px', background: '#FFB800', boxShadow: '0 0 10px #FFB800', animation: 'scanLineEffect 2.5s infinite linear' }} />
                 
@@ -2870,11 +2934,11 @@ const Landing = () => {
               </div>
 
               <div style={{ marginTop: '2rem' }}>
-                <span style={{ fontSize: '0.72rem', color: '#FFB800', fontWeight: 'black', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block' }}>
-                  🏆 SCANNER READY FOR YOUR CODE
+                <span style={{ fontSize: '0.75rem', color: '#FFB800', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block' }}>
+                  Every small contribution keeps the fun alive!
                 </span>
-                <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginTop: '0.25rem', maxWidth: '300px' }}>
-                  Once you provide your UPI scanner code, it will be mapped here for automated live transactions.
+                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginTop: '0.25rem' }}>
+                  — Made by a fellow cricket fan, for cricket fans 🏆
                 </span>
               </div>
 

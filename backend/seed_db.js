@@ -1,31 +1,19 @@
-const express = require('express');
-const Player = require('../models/Player');
-const mockPlayers2025 = require('./mockPlayers2025');
+const mongoose = require('mongoose');
+const Player = require('./models/Player');
+const playerPools = require('./routes/playerPoolsData');
+const mockPlayers2025 = require('./routes/mockPlayers2025');
 
-const router = express.Router();
+const MONGODB_URI = 'mongodb://127.0.0.1:27017/ipl-auction';
 
-const playerPools = require('./playerPoolsData');
-
-// Fetch all players
-router.get('/', async (req, res) => {
-  try {
-    const players = await Player.find();
-    res.json(players);
-  } catch (error) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Seed players (rich set of players for simulation)
-router.post('/seed', async (req, res) => {
-  try {
-    // Clear old players to ensure fresh seed
+mongoose.connect(MONGODB_URI)
+  .then(async () => {
+    console.log('MongoDB connected for seeding...');
     await Player.deleteMany({});
+    console.log('Cleared existing players.');
 
     const allPlayersToInsert = [];
     const seenNames2025 = new Set();
 
-    // 1. Seed the default fallback list (Virat, Bumrah, etc.)
     const defaultMockPlayers = [
       {
         name: 'Virat Kohli', role: 'Batsman', team: 'RCB', basePrice: 20000000,
@@ -61,7 +49,7 @@ router.post('/seed', async (req, res) => {
 
     allPlayersToInsert.push(...defaultMockPlayers);
 
-    const players2025 = require('../seed_players_2025');
+    const players2025 = require('./seed_players_2025');
     
     // Add all 2025 players from our authentic dataset
     players2025.forEach(player => {
@@ -69,7 +57,6 @@ router.post('/seed', async (req, res) => {
       seenNames2025.add(player.name);
     });
 
-    // 2. Seed all the other year-wise pools
     for (const [year, playersList] of Object.entries(playerPools)) {
       if (year === '2025') continue; // Skip 2025 as it is seeded above
       playersList.forEach(player => {
@@ -81,11 +68,10 @@ router.post('/seed', async (req, res) => {
     }
 
     await Player.insertMany(allPlayersToInsert);
-    res.status(201).json({ message: 'Seeded players successfully', count: allPlayersToInsert.length });
-  } catch (error) {
-    console.error('Error seeding database:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-module.exports = router;
+    console.log(`Successfully seeded ${allPlayersToInsert.length} players!`);
+    mongoose.disconnect();
+  })
+  .catch(err => {
+    console.error('Seeding error:', err);
+    process.exit(1);
+  });

@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 const URL = 'http://localhost:5000';
 export const socket = io(URL, { autoConnect: false });
 
-export const useAuctionStore = create((set, get) => ({
+export const useAuctionStore = create((set) => ({
   room: null,
   auctionState: null, // { playersList, currentIndex, currentBid, highestBidder, timeLeft }
   isConnected: false,
@@ -24,10 +24,7 @@ export const useAuctionStore = create((set, get) => ({
   updateAuction: (data) => set((state) => ({
     auctionState: {
       ...state.auctionState,
-      currentPlayer: data.currentPlayer,
-      currentBid: data.currentBid,
-      highestBidder: data.highestBidder,
-      timeLeft: data.timeLeft
+      ...data
     }
   })),
   updateTimer: (timeLeft) => set((state) => ({
